@@ -18,6 +18,8 @@ import {
   Copy,
   Crosshair,
   Database,
+  FileCheck2,
+  FileSearch,
   FileText,
   Fingerprint,
   Gauge,
@@ -30,10 +32,12 @@ import {
   Mic,
   MicOff,
   Network,
+  Play,
   PlugZap,
   Radio,
   RefreshCw,
   Search,
+  ShieldAlert,
   Send,
   Server,
   Settings,
@@ -42,6 +46,7 @@ import {
   ShieldHalf,
   Sparkles,
   Terminal,
+  UploadCloud,
   Wifi,
   WifiOff,
   X,
@@ -109,6 +114,23 @@ interface AssetRecord {
   lastSeen: string;
 }
 
+interface EvidenceFileReport {
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  checksum: string;
+  status: 'Valid' | 'Partially valid' | 'Invalid';
+  totalRecords: number;
+  validRecords: number;
+  invalidRecords: number;
+  issues: Array<{ line: number | null; message: string; severity: 'error' | 'warning' }>;
+  signals: Array<{ type: string; value: string; note: string; tone: 'danger' | 'warning' | 'neutral' | 'success' }>;
+  summary: string;
+  suggestedQuery: string;
+  assessment: AgentResult | null;
+  processedAt: string;
+}
+
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
@@ -148,6 +170,7 @@ const navItems = [
   { label: 'Command center', icon: LayoutDashboard, target: 'command' },
   { label: 'Incident queue', icon: ShieldHalf, target: 'incidents', count: '5' },
   { label: 'Assets', icon: Boxes, target: 'assets' },
+  { label: 'Evidence files', icon: FileSearch, target: 'files' },
   { label: 'Integrations', icon: Network, target: 'integrations' },
 ];
 
@@ -272,6 +295,118 @@ function localBrowserTriage(query: string, incidents: Incident[]): AgentResult {
   };
 }
 
+async function analyzeEvidenceLocally(fileName: string, content: string, incidents: Incident[]): Promise<EvidenceFileReport> {
+  const extension = fileName.toLowerCase().split('.').pop() || '';
+  if (!['csv', 'json', 'log', 'txt'].includes(extension)) throw new Error('Use a CSV, JSON, LOG, or TXT evidence file.');
+  const fileSize = new Blob([content]).size;
+  if (fileSize === 0) throw new Error('The selected evidence file is empty.');
+  if (fileSize > 512 * 1024) throw new Error('The evidence file must be smaller than 512 KB.');
+  if (content.includes('\0')) throw new Error('Binary evidence is not supported in this safe text analyzer.');
+
+  const issues: EvidenceFileReport['issues'] = [];
+  let totalRecords = 0;
+  let validRecords = 0;
+  let invalidRecords = 0;
+  if (extension === 'json') {
+    try {
+      const parsed = JSON.parse(content) as unknown;
+      const records = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === 'object' && 'events' in parsed && Array.isArray((parsed as { events: unknown }).events)
+          ? (parsed as { events: unknown[] }).events
+          : [parsed];
+      totalRecords = records.length;
+      records.forEach((record, index) => {
+        if (record && typeof record === 'object') validRecords += 1;
+        else {
+          invalidRecords += 1;
+          issues.push({ line: index + 1, message: 'Record is not a JSON object.', severity: 'error' });
+        }
+      });
+    } catch (error) {
+      totalRecords = 1;
+      invalidRecords = 1;
+      issues.push({ line: null, message: `Invalid JSON: ${error instanceof Error ? error.message : 'syntax error'}`, severity: 'error' });
+    }
+  } else if (extension === 'csv') {
+    const lines = content.split(/\r?\n/).filter((line) => line.trim());
+    const headers = lines[0]?.split(',').map((value) => value.trim()) ?? [];
+    totalRecords = Math.max(0, lines.length - 1);
+    if (headers.length < 2 || lines.length < 2) {
+      invalidRecords = totalRecords || 1;
+      issues.push({ line: 1, message: 'CSV requires a header and at least one data row.', severity: 'error' });
+    } else {
+      lines.slice(1).forEach((line, index) => {
+        const values = line.split(',').map((value) => value.trim());
+        if (values.length !== headers.length) {
+          invalidRecords += 1;
+          issues.push({ line: index + 2, message: `Expected ${headers.length} columns but found ${values.length}.`, severity: 'error' });
+        } else {
+          validRecords += 1;
+          const missing = values.filter((value) => !value).length;
+          if (missing) issues.push({ line: index + 2, message: `${missing} empty value${missing === 1 ? '' : 's'} detected.`, severity: 'warning' });
+        }
+      });
+    }
+  } else {
+    const lines = content.split(/\r?\n/).filter((line) => line.trim());
+    totalRecords = lines.length;
+    validRecords = lines.length;
+  }
+
+  const lower = content.toLowerCase();
+  const matchCount = (pattern: RegExp) => lower.match(pattern)?.length ?? 0;
+  const failedLogins = matchCount(/failed(?:\s+login|\s+authentication|\s+sign[- ]?in)?/g);
+  const powerShell = matchCount(/powershell(?:\.exe)?|encodedcommand|\s-enc\s/g);
+  const outbound = matchCount(/outbound|bytes[_ -]?sent|upload(?:ed)?|egress|destination[_ -]?ip/g);
+  const ransomware = matchCount(/ransomware|encrypted files?|shadow copies|vssadmin/g);
+  const promptInjection = /ignore (?:all |the )?(?:previous|system) instructions|reveal (?:the )?system prompt/i.test(content);
+  const ipAddresses = [...new Set(content.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? [])].slice(0, 5);
+  const signals: EvidenceFileReport['signals'] = [];
+  if (ransomware) signals.push({ type: 'Ransomware indicator', value: `${ransomware} match${ransomware === 1 ? '' : 'es'}`, note: 'Encryption or recovery-inhibition language detected', tone: 'danger' });
+  if (powerShell) signals.push({ type: 'PowerShell activity', value: `${powerShell} event${powerShell === 1 ? '' : 's'}`, note: 'Review encoded commands and process ancestry', tone: 'danger' });
+  if (failedLogins) signals.push({ type: 'Authentication failures', value: `${failedLogins} record${failedLogins === 1 ? '' : 's'}`, note: 'Check for password spraying or credential abuse', tone: failedLogins >= 3 ? 'danger' : 'warning' });
+  if (outbound) signals.push({ type: 'Outbound activity', value: `${outbound} indicator${outbound === 1 ? '' : 's'}`, note: 'Validate destination and transfer volume', tone: 'warning' });
+  if (ipAddresses.length) signals.push({ type: 'Network indicators', value: `${ipAddresses.length} unique IP${ipAddresses.length === 1 ? '' : 's'}`, note: ipAddresses.join(', '), tone: 'neutral' });
+  if (promptInjection) {
+    signals.push({ type: 'Untrusted instructions', value: 'Injection pattern found', note: 'Treated only as evidence and never executed', tone: 'warning' });
+    issues.push({ line: null, message: 'Prompt-injection text was found and isolated as untrusted evidence.', severity: 'warning' });
+  }
+  if (!signals.length) signals.push({ type: 'Known threat patterns', value: 'No direct match', note: 'Manual review is still recommended', tone: 'success' });
+
+  const status: EvidenceFileReport['status'] = invalidRecords === 0 ? 'Valid' : validRecords > 0 ? 'Partially valid' : 'Invalid';
+  const suggestedQuery = ransomware
+    ? 'Investigate active ransomware indicators and destructive file encryption in the uploaded evidence.'
+    : powerShell
+      ? 'Investigate suspicious PowerShell execution and encoded command activity in the uploaded evidence.'
+      : outbound
+        ? 'Investigate potential data exfiltration and suspicious outbound traffic in the uploaded evidence.'
+        : failedLogins
+          ? 'Investigate repeated failed logins and possible password spraying in the uploaded evidence.'
+          : 'Review the uploaded security evidence for anomalies and recommend next steps.';
+  const checksumBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content));
+  const checksum = [...new Uint8Array(checksumBytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+
+  return {
+    fileName: fileName.replace(/[\\/\0]/g, '_').slice(0, 180),
+    fileType: extension.toUpperCase(),
+    fileSize,
+    checksum,
+    status,
+    totalRecords,
+    validRecords,
+    invalidRecords,
+    issues: issues.slice(0, 20),
+    signals: signals.slice(0, 6),
+    summary: status === 'Invalid'
+      ? 'The file could not be safely parsed. Correct the format errors before relying on its security data.'
+      : `${validRecords.toLocaleString()} of ${totalRecords.toLocaleString()} records were parsed. Aegis found ${signals.filter((signal) => signal.tone !== 'success').length} security signal groups.`,
+    suggestedQuery,
+    assessment: status === 'Invalid' ? null : localBrowserTriage(suggestedQuery, incidents),
+    processedAt: new Date().toISOString(),
+  };
+}
+
 function formatTime(date: Date) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -280,10 +415,13 @@ function App() {
   const [incidents, setIncidents] = useState<Incident[]>(fallbackIncidents);
   const [query, setQuery] = useState('');
   const [activeNav, setActiveNav] = useState('Command center');
-  const [workspaceView, setWorkspaceView] = useState<'assets' | 'integrations' | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<'assets' | 'files' | 'integrations' | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [assetSearch, setAssetSearch] = useState('');
+  const [evidenceReport, setEvidenceReport] = useState<EvidenceFileReport | null>(null);
+  const [isEvidenceAnalyzing, setIsEvidenceAnalyzing] = useState(false);
+  const [isEvidenceDragging, setIsEvidenceDragging] = useState(false);
   const [integrationTesting, setIntegrationTesting] = useState<keyof Omit<IntegrationStatus, 'mode'> | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -298,6 +436,7 @@ function App() {
   const [toast, setToast] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const deepgramSocketRef = useRef<WebSocket | null>(null);
@@ -603,11 +742,83 @@ function App() {
     }
   };
 
+  const handleEvidenceFile = async (file: File) => {
+    if (isEvidenceAnalyzing) return;
+    const extension = file.name.toLowerCase().split('.').pop() || '';
+    if (!['csv', 'json', 'log', 'txt'].includes(extension)) {
+      setToast('Unsupported file. Choose CSV, JSON, LOG, or TXT evidence.');
+      return;
+    }
+    if (file.size > 512 * 1024) {
+      setToast('Evidence files must be smaller than 512 KB for this secure demo.');
+      return;
+    }
+
+    setIsEvidenceAnalyzing(true);
+    setEvidenceReport(null);
+    try {
+      const content = await file.text();
+      const isStaticPreview = window.location.hostname === 'htmlpreview.github.io'
+        || window.location.hostname.includes('githack.com');
+      let report: EvidenceFileReport;
+      if (isStaticPreview) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_350));
+        report = await analyzeEvidenceLocally(file.name, content, incidents);
+      } else {
+        try {
+          const [response] = await Promise.all([
+            fetch('/api/files/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fileName: file.name, content }),
+            }),
+            new Promise((resolve) => window.setTimeout(resolve, 1_100)),
+          ]);
+          const payload = await response.json() as EvidenceFileReport & { message?: string };
+          if (!response.ok) throw new Error(payload.message || 'File analysis failed');
+          report = payload;
+        } catch {
+          report = await analyzeEvidenceLocally(file.name, content, incidents);
+          setToast('The secure local evidence analyzer completed while the API was unavailable.');
+        }
+      }
+      setEvidenceReport(report);
+      if (report.status === 'Invalid') setToast('File errors were found. Review the validation report before continuing.');
+      else setToast(`${report.fileName} analyzed successfully.`);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'The evidence file could not be analyzed.');
+    } finally {
+      setIsEvidenceAnalyzing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const runSampleEvidence = () => {
+    const sample = [
+      'timestamp,user,source_ip,result,event',
+      '2026-08-15T09:31:02Z,m.chen,185.220.101.34,failed login,authentication',
+      '2026-08-15T09:31:18Z,m.chen,91.214.124.17,failed login,authentication',
+      '2026-08-15T09:31:43Z,m.chen,45.95.147.12,failed login,authentication',
+      '2026-08-15T09:32:09Z,m.chen,185.220.101.34,failed login,authentication',
+      '2026-08-15T09:35:02Z,m.chen,91.214.124.17,success,new device',
+      '2026-08-15T09:36:11Z,m.chen,91.214.124.17,success,privilege change',
+      '2026-08-15T09:37:44Z,m.chen,missing-column',
+    ].join('\n');
+    void handleEvidenceFile(new File([sample], 'identity-attack-sample.csv', { type: 'text/csv' }));
+  };
+
+  const openEvidenceAssessment = () => {
+    if (!evidenceReport?.assessment) return;
+    setResult(evidenceReport.assessment);
+    setWorkspaceView(null);
+    setDrawerOpen(true);
+  };
+
   const handleNav = (label: string, target: string) => {
     setActiveNav(label);
     setIsSidebarOpen(false);
     setDrawerOpen(false);
-    if (target === 'assets' || target === 'integrations') {
+    if (target === 'assets' || target === 'files' || target === 'integrations') {
       setWorkspaceView(target);
       return;
     }
@@ -954,6 +1165,7 @@ function App() {
                   <div className="palette-actions">
                     <button onClick={() => void runTriage('Investigate failed logins for m.chen@northstar.io')}><Fingerprint size={17} /><span><strong>Investigate failed logins</strong><small>Identity triage · m.chen@northstar.io</small></span><em>ASK</em></button>
                     <button onClick={() => void runTriage('Summarize incident INC-4281')}><ShieldHalf size={17} /><span><strong>Open critical incident</strong><small>INC-4281 · suspicious PowerShell</small></span><em>ASK</em></button>
+                    <button onClick={() => { setIsCommandPaletteOpen(false); setActiveNav('Evidence files'); setWorkspaceView('files'); }}><FileSearch size={17} /><span><strong>Analyze an evidence file</strong><small>Validate and triage CSV, JSON, LOG, or TXT</small></span><ChevronRight size={16} /></button>
                     <button onClick={() => { setIsCommandPaletteOpen(false); setActiveNav('Assets'); setWorkspaceView('assets'); }}><Boxes size={17} /><span><strong>Browse protected assets</strong><small>1,291 endpoints, servers, and cloud resources</small></span><ChevronRight size={16} /></button>
                     <button onClick={() => { setIsCommandPaletteOpen(false); setActiveNav('Integrations'); setWorkspaceView('integrations'); }}><PlugZap size={17} /><span><strong>Check agent integrations</strong><small>Deepgram, Gemini, and Murf AI pipeline</small></span><ChevronRight size={16} /></button>
                   </div>
@@ -991,11 +1203,11 @@ function App() {
       {workspaceView && (
         <>
           <button className="drawer-backdrop" onClick={() => setWorkspaceView(null)} aria-label={`Close ${workspaceView}`} />
-          <aside className="workspace-drawer" aria-label={workspaceView === 'assets' ? 'Asset inventory' : 'Integration management'}>
+          <aside className="workspace-drawer" aria-label={workspaceView === 'assets' ? 'Asset inventory' : workspaceView === 'files' ? 'Evidence file analysis' : 'Integration management'}>
             <div className="workspace-drawer-header">
               <div>
-                <span className="workspace-drawer-icon">{workspaceView === 'assets' ? <Boxes size={19} /> : <PlugZap size={19} />}</span>
-                <div><p>{workspaceView === 'assets' ? 'SECURITY INVENTORY' : 'AGENT PIPELINE'}</p><h2>{workspaceView === 'assets' ? 'Protected assets' : 'Integrations'}</h2></div>
+                <span className="workspace-drawer-icon">{workspaceView === 'assets' ? <Boxes size={19} /> : workspaceView === 'files' ? <FileSearch size={19} /> : <PlugZap size={19} />}</span>
+                <div><p>{workspaceView === 'assets' ? 'SECURITY INVENTORY' : workspaceView === 'files' ? 'EVIDENCE LAB' : 'AGENT PIPELINE'}</p><h2>{workspaceView === 'assets' ? 'Protected assets' : workspaceView === 'files' ? 'Analyze evidence' : 'Integrations'}</h2></div>
               </div>
               <button onClick={() => setWorkspaceView(null)} aria-label="Close workspace"><X size={20} /></button>
             </div>
@@ -1032,6 +1244,102 @@ function App() {
                     })}
                     {visibleAssets.length === 0 && <div className="empty-assets"><Search size={20} /><strong>No assets found</strong><span>Try a hostname, platform, or owner.</span></div>}
                   </div>
+                </>
+              ) : workspaceView === 'files' ? (
+                <>
+                  <div className="workspace-intro">
+                    <div><h3>Turn raw evidence into an incident decision</h3><p>Aegis validates every record, isolates unsafe instructions, correlates threat signals, and preserves an evidence checksum.</p></div>
+                    <span className="sync-state"><ShieldCheck size={13} /> SAFE PARSER</span>
+                  </div>
+
+                  <input
+                    ref={fileInputRef}
+                    className="hidden-file-input"
+                    type="file"
+                    accept=".csv,.json,.log,.txt,text/csv,application/json,text/plain"
+                    onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleEvidenceFile(file); }}
+                  />
+                  <div
+                    className={`file-dropzone ${isEvidenceDragging ? 'dragging' : ''}`}
+                    onDragEnter={(event) => { event.preventDefault(); setIsEvidenceDragging(true); }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragLeave={(event) => { event.preventDefault(); setIsEvidenceDragging(false); }}
+                    onDrop={(event) => { event.preventDefault(); setIsEvidenceDragging(false); const file = event.dataTransfer.files?.[0]; if (file) void handleEvidenceFile(file); }}
+                  >
+                    <span className="file-drop-icon"><UploadCloud size={25} /></span>
+                    <div><strong>{isEvidenceDragging ? 'Drop evidence to start analysis' : 'Upload security evidence'}</strong><p>CSV, JSON, LOG, or TXT · maximum 512 KB · files are never executed</p></div>
+                    <div className="file-drop-actions">
+                      <button onClick={() => fileInputRef.current?.click()} disabled={isEvidenceAnalyzing}><UploadCloud size={15} /> Choose file</button>
+                      <button className="sample-file-button" onClick={runSampleEvidence} disabled={isEvidenceAnalyzing}><Play size={14} /> Run attack sample</button>
+                    </div>
+                  </div>
+
+                  {isEvidenceAnalyzing && (
+                    <div className="evidence-processing" role="status">
+                      <div className="evidence-processing-core"><FileSearch size={22} /><span /></div>
+                      <div><p>AEGIS EVIDENCE PIPELINE</p><h4>Validating, parsing, and correlating records…</h4><span>Checking structure → normalizing events → detecting threats → preparing assessment</span></div>
+                      <div className="evidence-progress"><i /></div>
+                    </div>
+                  )}
+
+                  {!isEvidenceAnalyzing && !evidenceReport && (
+                    <div className="file-empty-state">
+                      <div className="file-process-map">
+                        <span><FileCheck2 size={18} /><b>01</b><strong>Validate</strong><small>Format and records</small></span>
+                        <ChevronRight size={15} />
+                        <span><FileSearch size={18} /><b>02</b><strong>Detect</strong><small>Security signals</small></span>
+                        <ChevronRight size={15} />
+                        <span><BrainCircuit size={18} /><b>03</b><strong>Triage</strong><small>DEFCON and MITRE</small></span>
+                      </div>
+                      <div className="file-safety-note"><LockKeyhole size={16} /><span><strong>Evidence-safe processing</strong><small>Original content is treated as untrusted data. Embedded instructions cannot control the agent.</small></span></div>
+                    </div>
+                  )}
+
+                  {!isEvidenceAnalyzing && evidenceReport && (
+                    <div className="file-report">
+                      <div className="file-report-header">
+                        <span className={`file-status-icon ${evidenceReport.status.toLowerCase().replace(' ', '-')}`}><FileCheck2 size={20} /></span>
+                        <div><p>ANALYSIS COMPLETE</p><h4>{evidenceReport.fileName}</h4><span>{evidenceReport.fileType} · {(evidenceReport.fileSize / 1024).toFixed(1)} KB · processed now</span></div>
+                        <em className={`file-status-badge ${evidenceReport.status.toLowerCase().replace(' ', '-')}`}>{evidenceReport.status}</em>
+                      </div>
+
+                      <p className="file-report-summary">{evidenceReport.summary}</p>
+                      <div className="file-report-metrics">
+                        <div><span>Total records</span><strong>{evidenceReport.totalRecords}</strong></div>
+                        <div><span>Valid records</span><strong>{evidenceReport.validRecords}</strong></div>
+                        <div><span>Invalid records</span><strong className={evidenceReport.invalidRecords ? 'metric-error' : ''}>{evidenceReport.invalidRecords}</strong></div>
+                        <div><span>Signal groups</span><strong>{evidenceReport.signals.length}</strong></div>
+                      </div>
+
+                      <div className="file-integrity"><ShieldCheck size={15} /><div><span>EVIDENCE INTEGRITY · SHA-256</span><code>{evidenceReport.checksum}</code></div><em>VERIFIED</em></div>
+
+                      <section className="file-report-section">
+                        <div className="file-report-title"><span>Detected security signals</span><em>{evidenceReport.signals.length} groups</em></div>
+                        <div className="file-signal-list">
+                          {evidenceReport.signals.map((signal) => (
+                            <div key={`${signal.type}-${signal.value}`}><i className={signal.tone} /><span><strong>{signal.type}</strong><small>{signal.note}</small></span><em>{signal.value}</em></div>
+                          ))}
+                        </div>
+                      </section>
+
+                      {evidenceReport.issues.length > 0 && (
+                        <section className="file-report-section">
+                          <div className="file-report-title"><span>Data quality report</span><em>{evidenceReport.issues.length} issues</em></div>
+                          <div className="file-issue-list">
+                            {evidenceReport.issues.slice(0, 8).map((issue, index) => (
+                              <div key={`${issue.line}-${index}`}><ShieldAlert size={14} /><span><strong>{issue.line ? `Line ${issue.line}` : 'File-level warning'}</strong><small>{issue.message}</small></span><em className={issue.severity}>{issue.severity}</em></div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {evidenceReport.assessment ? (
+                        <button className="open-assessment-button" onClick={openEvidenceAssessment}><Sparkles size={16} /><span><strong>Open threat assessment</strong><small>View DEFCON, MITRE mapping, evidence, and mitigation directives</small></span><ArrowRight size={17} /></button>
+                      ) : (
+                        <div className="invalid-file-action"><AlertTriangle size={17} /><span><strong>Threat assessment paused</strong><small>Correct the file format errors and upload the evidence again.</small></span></div>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <>

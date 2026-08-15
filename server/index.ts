@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket, { WebSocketServer } from 'ws';
 import { incidents, triage } from './engine.js';
+import { inspectEvidenceFile } from './fileAnalyzer.js';
 import { integrationStatus, synthesizeWithMurf, triageWithGemini } from './integrations.js';
 
 const app = express();
@@ -14,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.disable('x-powered-by');
 app.use(compression());
-app.use(express.json({ limit: '32kb' }));
+app.use(express.json({ limit: '600kb' }));
 
 app.get('/api/health', (_request, response) => {
   response.json({
@@ -31,6 +32,34 @@ app.get('/api/integrations', (_request, response) => {
 
 app.get('/api/incidents', (_request, response) => {
   response.json({ incidents, total: incidents.length });
+});
+
+app.post('/api/files/analyze', async (request, response) => {
+  const fileName = typeof request.body?.fileName === 'string' ? request.body.fileName.trim() : '';
+  const content = typeof request.body?.content === 'string' ? request.body.content : '';
+  if (!fileName || !content) {
+    response.status(400).json({ message: 'A file name and text evidence content are required.' });
+    return;
+  }
+
+  try {
+    const inspection = inspectEvidenceFile(fileName, content);
+    let assessment = null;
+    if (inspection.status !== 'Invalid') {
+      const evidenceContext = inspection.signals
+        .map((signal) => `${signal.type}: ${signal.value}. ${signal.note}`)
+        .join(' ');
+      const query = `${inspection.suggestedQuery} Parsed file ${inspection.fileName}: ${inspection.validRecords} valid records, ${inspection.invalidRecords} invalid records. Correlated signal summary: ${evidenceContext}`;
+      try {
+        assessment = await triageWithGemini(query);
+      } catch {
+        assessment = triage(query);
+      }
+    }
+    response.json({ ...inspection, assessment });
+  } catch (error) {
+    response.status(400).json({ message: error instanceof Error ? error.message : 'The evidence file could not be analyzed.' });
+  }
 });
 
 app.post('/api/agent/triage', async (request, response) => {

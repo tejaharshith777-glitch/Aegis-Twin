@@ -21,8 +21,11 @@ The local Aegis policy engine automatically takes over if Gemini is unavailable,
 - Ordered mitigation directives with human approval boundaries
 - Murf AI incident briefings with secure same-origin audio delivery
 - Endpoint, identity, email, cloud, and network triage
+- Secure CSV, JSON, LOG, and TXT evidence-file analysis
+- Record-level validation, partial-file recovery, SHA-256 evidence checksums, and prompt-injection isolation
+- One-click attack sample for a reliable live hackathon demonstration
 - Human-approved containment and incident-brief workflows
-- Live SOC posture, sensor coverage, incident queue, and activity dashboard
+- Live SOC posture, sensor coverage, incident queue, asset inventory, global search, and activity dashboard
 - Responsive desktop, tablet, and mobile interface
 - Provider keys remain server-side and are never sent to the browser
 
@@ -81,6 +84,7 @@ The production Express service serves both the compiled website and API from `PO
 | `GET` | `/api/health` | Agent health and provider configuration |
 | `GET` | `/api/integrations` | Redacted provider readiness flags |
 | `GET` | `/api/incidents` | Prioritized incident queue |
+| `POST` | `/api/files/analyze` | Validate and triage text-based security evidence |
 | `WS` | `/api/listen` | Same-origin Deepgram audio proxy |
 | `POST` | `/api/agent/triage` | Gemini analysis with local failover |
 | `POST` | `/api/voice/synthesize` | Same-origin Murf audio generation |
@@ -105,6 +109,10 @@ Deepgram Nova-3 ── live transcript ──► Gemini reasoning policy
     │ server-side WebSocket                   │ structured triage
     │                                         ▼
 React operator console ◄── Express API ── Aegis policy validation
+    │                           ▲             │
+    │                           │             │
+    │                 evidence-file parser   │
+    │                 CSV · JSON · LOG · TXT │
     │                                         │
     └──────────── audio ◄── Murf AI ◄─────────┘
 ```
@@ -115,7 +123,9 @@ React operator console ◄── Express API ── Aegis policy validation
 - The browser connects to same-origin HTTP and WebSocket endpoints; secrets never enter frontend bundles.
 - Gemini output is constrained to a schema and validated before it reaches the interface.
 - Agent actions remain separate from analysis and require explicit operator approval.
-- Untrusted incident telemetry cannot override the system triage policy.
+- Untrusted incident telemetry and embedded file instructions cannot override the system triage policy.
+- Uploaded evidence is never executed; unsupported and binary formats are rejected.
+- Evidence files are limited to 512 KB, validated record by record, and identified with SHA-256.
 - Request size and generated speech length are limited.
 - Deepgram audio is streamed and not stored by this application.
 - The local deterministic engine preserves core triage when an external provider fails.

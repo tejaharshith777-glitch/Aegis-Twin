@@ -10,7 +10,8 @@
     "dev:web": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
-    "test": "tsx --test server/*.test.ts"
+    "test": "tsx --test server/*.test.ts",
+    "build:pages": "tsc -b && PAGES_BUILD=true vite build --outDir docs"
   },
   "dependencies": {
     "compression": "^1.8.1",

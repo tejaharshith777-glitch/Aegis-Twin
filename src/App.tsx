@@ -989,6 +989,7 @@ function App() {
         <header className="topbar">
           <button className="mobile-menu icon-button" onClick={() => setIsSidebarOpen(true)} aria-label="Open navigation"><Menu size={21} /></button>
           <div className="environment"><span className="live-dot" /> PRODUCTION <span className="environment-divider" /> All systems operational</div>
+          <a className="back-to-site" href="#/">← Website</a>
           <div className="topbar-actions">
             <label className="search-button" aria-label="Search or ask Aegis">
               <Search size={17} />

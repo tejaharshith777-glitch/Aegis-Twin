@@ -930,8 +930,309 @@ function App() {
     setToast('Analysis copied to clipboard.');
   };
 
+  const [view, setView] = useState<'experience' | 'console'>('experience');
+  const pendingCommandRef = useRef<string | null>(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [activeScene, setActiveScene] = useState(0);
+  const [visibleSections, setVisibleSections] = useState<Record<string, boolean>>({});
+  const sceneRefs = useRef<Array<HTMLElement | null>>([]);
+  const counterRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+
+  useEffect(() => {
+    if (view !== 'experience') return;
+    let frame = 0;
+    const updateScroll = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setScrollProgress(max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0);
+      frame = 0;
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateScroll);
+    };
+    updateScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== 'experience') return;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const id = entry.target.getAttribute('data-reveal');
+        if (id && entry.isIntersecting) setVisibleSections((current) => ({ ...current, [id]: true }));
+      });
+    }, { threshold: 0.16, rootMargin: '0px 0px -8% 0px' });
+    document.querySelectorAll<HTMLElement>('[data-reveal]').forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== 'experience') return;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const index = Number(entry.target.getAttribute('data-scene-index'));
+        if (Number.isFinite(index)) setActiveScene(index);
+      });
+    }, { threshold: 0.52 });
+    sceneRefs.current.forEach((scene) => scene && observer.observe(scene));
+    return () => observer.disconnect();
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== 'experience') return;
+    const counts = [
+      { id: 'signals', end: 2847, suffix: '', decimals: 0 },
+      { id: 'assets', end: 1291, suffix: '', decimals: 0 },
+      { id: 'coverage', end: 99.5, suffix: '%', decimals: 1 },
+      { id: 'triage', end: 102, suffix: 's', decimals: 0 },
+    ];
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const target = entry.target as HTMLSpanElement;
+        if (!entry.isIntersecting || target.dataset.animated === 'true') return;
+        target.dataset.animated = 'true';
+        const count = counts.find((item) => item.id === target.dataset.counter);
+        if (!count) return;
+        const startedAt = performance.now();
+        const animate = (now: number) => {
+          const elapsed = Math.min(1, (now - startedAt) / 1300);
+          const eased = 1 - Math.pow(1 - elapsed, 3);
+          target.textContent = `${(count.end * eased).toFixed(count.decimals)}${count.suffix}`;
+          if (elapsed < 1) window.requestAnimationFrame(animate);
+        };
+        window.requestAnimationFrame(animate);
+      });
+    }, { threshold: 0.55 });
+    Object.values(counterRefs.current).forEach((element) => element && observer.observe(element));
+    return () => observer.disconnect();
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== 'console' || !pendingCommandRef.current) return;
+    const command = pendingCommandRef.current;
+    pendingCommandRef.current = null;
+    const timer = window.setTimeout(() => void runTriage(command), 280);
+    return () => window.clearTimeout(timer);
+  }, [view]);
+
+  const enterConsole = (command?: string) => {
+    pendingCommandRef.current = command ?? null;
+    setView('console');
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+  };
+
+  const scrollToSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (view === 'experience') {
+    return (
+      <ExperienceView
+        scrollProgress={scrollProgress}
+        activeScene={activeScene}
+        visibleSections={visibleSections}
+        sceneRefs={sceneRefs}
+        counterRefs={counterRefs}
+        onScrollToSection={scrollToSection}
+        onEnterConsole={enterConsole}
+      />
+    );
+  }
+
   return (
-    <div className="app-shell">
+    <ConsoleShell
+      onBack={() => setView('experience')}
+      incidents={incidents} query={query} activeNav={activeNav} workspaceView={workspaceView}
+      isCommandPaletteOpen={isCommandPaletteOpen} globalSearch={globalSearch} assetSearch={assetSearch}
+      evidenceReport={evidenceReport} isEvidenceAnalyzing={isEvidenceAnalyzing} isEvidenceDragging={isEvidenceDragging}
+      integrationTesting={integrationTesting} isSidebarOpen={isSidebarOpen} isListening={isListening}
+      isAnalyzing={isAnalyzing} isVoiceLoading={isVoiceLoading} pipelineStep={pipelineStep} result={result}
+      integrations={integrations} drawerOpen={drawerOpen} actionInFlight={actionInFlight}
+      showAllIncidents={showAllIncidents} toast={toast} currentTime={currentTime}
+      inputRef={inputRef} fileInputRef={fileInputRef} runTriage={runTriage} handleSubmit={handleSubmit}
+      handleMic={handleMic} handleEvidenceFile={handleEvidenceFile} runSampleEvidence={runSampleEvidence}
+      openEvidenceAssessment={openEvidenceAssessment} handleNav={handleNav}
+      handleIntegrationTest={handleIntegrationTest} handleAction={handleAction} readBriefing={readBriefing}
+      copyAnalysis={copyAnalysis} setQuery={setQuery} setGlobalSearch={setGlobalSearch}
+      setAssetSearch={setAssetSearch} setIsCommandPaletteOpen={setIsCommandPaletteOpen}
+      setWorkspaceView={setWorkspaceView} setActiveNav={setActiveNav} setIsSidebarOpen={setIsSidebarOpen}
+      setDrawerOpen={setDrawerOpen} setShowAllIncidents={setShowAllIncidents}
+      setEvidenceReport={setEvidenceReport} setIsEvidenceDragging={setIsEvidenceDragging} setToast={setToast}
+    />
+  );
+}
+
+function ExperienceView({
+  scrollProgress, activeScene, visibleSections, sceneRefs, counterRefs, onScrollToSection, onEnterConsole,
+}: {
+  scrollProgress: number;
+  activeScene: number;
+  visibleSections: Record<string, boolean>;
+  sceneRefs: React.MutableRefObject<Array<HTMLElement | null>>;
+  counterRefs: React.MutableRefObject<Record<string, HTMLSpanElement | null>>;
+  onScrollToSection: (id: string) => void;
+  onEnterConsole: (command?: string) => void;
+}) {
+  const experienceSections = [
+    { id: 'signal', label: 'Signal' },
+    { id: 'ingestion', label: 'Ingestion' },
+    { id: 'cognition', label: 'Cognition' },
+    { id: 'response', label: 'Response' },
+  ];
+
+  const sceneCopy = [
+    { kicker: '01 · DETECTION', title: 'A plain-language report becomes a live security event.', body: 'The operator says that WIN-FIN-07 is running hidden PowerShell. Aegis treats the report as untrusted telemetry, captures context, and immediately begins correlation.', points: ['Endpoint, identity, email, cloud, and network context', 'No secret leaves the server-side trust boundary', 'Interim transcript appears while the operator is still speaking'] },
+    { kicker: '02 · VOICE INGESTION', title: 'Deepgram Nova-3 streams the microphone through a secure proxy.', body: 'Audio travels over the same-origin WebSocket to Deepgram. Cybersecurity terminology is boosted, endpoint detection and utterance boundaries create a clean command, and browser transcription remains available as a fallback.', points: ['Server-side key, never exposed in the browser', 'Interim and final transcription in the command bar', 'Resilient fallback for restricted environments'] },
+    { kicker: '03 · AI COGNITION', title: 'Gemini returns a constrained DEFCON assessment.', body: 'The model must provide severity, confidence, risk score, evidence, explainable reasoning, MITRE ATT&CK mappings, and ordered directives. Aegis validates the schema before the interface trusts it.', points: ['DEFCON 1–3 classification with risk and confidence', 'MITRE techniques such as T1059.001 and T1105', 'Local deterministic engine takes over during provider outages'] },
+    { kicker: '04 · AUTHORITATIVE RESPONSE', title: 'Murf AI speaks the briefing; the human approves action.', body: 'Aegis summarizes the incident in concise spoken language, stages containment and incident-brief workflows, and preserves evidence boundaries. Automation recommends; the operator decides.', points: ['Spoken GEN2 briefing with browser voice fallback', 'Directives ordered by containment priority', 'One-click containment and audit-ready brief creation'] },
+  ];
+
+  const capabilityCards = [
+    { icon: Mic, title: 'Voice-activated command', copy: 'Speak naturally about an endpoint, identity, alert, or cloud change. Aegis starts triage when the utterance ends.' },
+    { icon: BrainCircuit, title: 'Constrained reasoning', copy: 'Every AI result is schema-validated for DEFCON level, confidence, risk score, evidence, MITRE mapping, and directives.' },
+    { icon: FileSearch, title: 'Evidence-safe analysis', copy: 'CSV, JSON, LOG, and TXT files are parsed as data. Embedded instructions are isolated and never control the agent.' },
+    { icon: ShieldCheck, title: 'Human-approved actions', copy: 'Containment, session revocation, and brief creation remain separate from analysis until an operator explicitly approves them.' },
+    { icon: Radio, title: 'Spoken briefings', copy: 'Murf AI generates a calm, authoritative incident briefing. The browser speech engine is retained for resilience.' },
+    { icon: Gauge, title: 'SOC situational awareness', copy: 'Posture, incidents, assets, sensor coverage, activity, and global search stay synchronized in the command center.' },
+  ];
+
+  const securityPrinciples = [
+    'Provider keys are read only from server environment variables.',
+    'Browser traffic uses same-origin HTTP and WebSocket endpoints.',
+    'Uploaded evidence is never executed and is limited to 512 KB.',
+    'Files are validated record by record and identified with SHA-256.',
+    'Prompt-injection text is treated as untrusted evidence.',
+    'The local engine preserves triage when external providers fail.',
+  ];
+
+  const timelineSteps = [
+    { icon: AudioWaveform, label: 'Microphone', copy: 'Low-latency capture with endpoint detection.' },
+    { icon: BrainCircuit, label: 'Reasoning policy', copy: 'Structured triage, risk scoring, and MITRE mapping.' },
+    { icon: Radio, label: 'Voice response', copy: 'Concise briefing for fast operator action.' },
+    { icon: ShieldCheck, label: 'Approved action', copy: 'Containment workflows remain human-controlled.' },
+  ];
+
+  return (
+    <div className="scroll-experience">
+      <div className="scroll-progress" style={{ transform: `scaleX(${scrollProgress})` }} />
+      <header className="experience-nav">
+        <button className="experience-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <span><ShieldCheck size={20} /></span>
+          <div><strong>AEGIS TWIN</strong><small>VOICE-FIRST SECURITY OPERATIONS</small></div>
+        </button>
+        <nav aria-label="Experience sections">
+          {experienceSections.map((section) => <button key={section.id} onClick={() => onScrollToSection(section.id)}>{section.label}</button>)}
+          <button onClick={() => onScrollToSection('security')}>Security</button>
+        </nav>
+        <button className="console-launch" onClick={() => onEnterConsole()}>Enter command center <ArrowRight size={15} /></button>
+      </header>
+
+      <section className="experience-hero">
+        <div className="hero-grid-bg" />
+        <div className="hero-orbit hero-orbit-one" />
+        <div className="hero-orbit hero-orbit-two" />
+        <div className="hero-copy" data-reveal="hero">
+          <p className="experience-kicker"><span className="status-pulse" /> LIVE AI SECURITY DIGITAL TWIN</p>
+          <h1>From spoken suspicion to a validated incident verdict.</h1>
+          <p className="hero-lead">Aegis Twin streams an operator’s voice to Deepgram, applies a constrained Gemini cybersecurity policy, maps behavior to MITRE ATT&amp;CK, and returns an authoritative Murf briefing without exposing provider keys.</p>
+          <div className="hero-actions">
+            <button className="primary-scroll-button" onClick={() => onEnterConsole('Investigate suspicious PowerShell activity on WIN-FIN-07')}>Investigate WIN-FIN-07 <ArrowRight size={16} /></button>
+            <button className="secondary-scroll-button" onClick={() => onScrollToSection('signal')}>See the response loop <ChevronDown size={15} /></button>
+          </div>
+        </div>
+        <div className={`hero-visual ${visibleSections.hero ? 'visible' : ''}`}>
+          <div className="transcript-card floating-card-one"><span><Mic size={14} /> INTERIM TRANSCRIPT</span><strong>“Investigate the PowerShell activity on WIN-FIN-07.”</strong><div className="transcript-wave"><i /><i /><i /><i /><i /><i /><i /></div></div>
+          <div className="assessment-card floating-card-two"><div><span>DEFCON 1</span><b>94 RISK</b></div><strong>Likely malicious PowerShell chain</strong><small>T1059.001 · PowerShell</small><small>T1105 · Ingress Tool Transfer</small></div>
+          <div className="hero-core"><div className="hero-core-ring" /><Bot size={42} /></div>
+        </div>
+        <button className="scroll-cue" onClick={() => onScrollToSection('signal')} aria-label="Scroll to story"><ChevronDown size={18} /></button>
+      </section>
+
+      <section className="impact-strip" data-reveal="impact">
+        {[
+          { id: 'signals', label: 'Signals analyzed', initial: '0', note: 'last 24 hours' },
+          { id: 'assets', label: 'Protected assets', initial: '0', note: 'endpoint to cloud' },
+          { id: 'coverage', label: 'Sensor coverage', initial: '0.0%', note: 'telemetry health' },
+          { id: 'triage', label: 'Mean triage', initial: '0s', note: 'under five-minute target' },
+        ].map((stat) => <div key={stat.id} className="impact-stat"><strong ref={(element) => { counterRefs.current[stat.id] = element; }} data-counter={stat.id} data-animated="false">{stat.initial}</strong><span>{stat.label}</span><small>{stat.note}</small></div>)}
+      </section>
+
+      <section className="story-shell">
+        <div className="story-rail"><div className="story-rail-track" style={{ height: `${Math.min(100, (activeScene / 3) * 100)}%` }} />{experienceSections.map((section, index) => <button key={section.id} className={activeScene === index ? 'active' : ''} onClick={() => onScrollToSection(section.id)}><span>{String(index + 1).padStart(2, '0')}</span>{section.label}</button>)}</div>
+        <div className="story-sections">
+          {sceneCopy.map((scene, index) => (
+            <section key={scene.kicker} id={experienceSections[index].id} className="story-section" ref={(element) => { sceneRefs.current[index] = element; }} data-scene-index={index}>
+              <div className={`scene-copy ${activeScene === index ? 'active' : ''}`} data-reveal={`scene-${index}`}>
+                <p className="experience-kicker mint">{scene.kicker}</p><h2>{scene.title}</h2><p>{scene.body}</p>
+                <ul>{scene.points.map((point) => <li key={point}><Check size={15} />{point}</li>)}</ul>
+              </div>
+              <div className={`scene-visual scene-${index} ${activeScene === index ? 'active' : ''}`} aria-hidden="true">
+                {index === 0 && <div className="signal-board"><div className="board-line alert"><AlertTriangle size={16} /><span>EDR · WIN-FIN-07</span><b>CRITICAL</b></div><div className="board-line warn"><Fingerprint size={16} /><span>Identity baseline drift</span><b>HIGH</b></div><div className="board-line"><Network size={16} /><span>New egress destination</span><b>REVIEW</b></div><div className="board-line success"><ShieldCheck size={16} /><span>Evidence boundary set</span><b>READY</b></div></div>}
+                {index === 1 && <div className="ingestion-console"><div className="console-dots"><i /><i /><i /></div><code>$ mic stream --proxy /api/listen</code><code>deepgram:nova-3 → interim=true</code><code className="mint-code">transcript: investigate PowerShell…</code><div className="audio-bars"><span /><span /><span /><span /><span /><span /><span /><span /></div></div>}
+                {index === 2 && <div className="cognition-panel"><div className="cognition-score"><strong>94</strong><span>RISK</span></div><div className="cognition-metrics"><div><b>DEFCON</b><em className="critical">1</em></div><div><b>CONF</b><em>91%</em></div><div><b>MITRE</b><em>2</em></div></div><div className="schema-grid"><span>headline</span><span>evidence</span><span>reasoning</span><span>directives</span></div></div>}
+                {index === 3 && <div className="response-panel"><div className="response-wave"><Headphones size={28} /></div><p>“DEFCON 1. Likely malicious PowerShell chain detected. Isolate the endpoint, block observed destinations, and preserve volatile evidence.”</p><button><ShieldCheck size={14} /> Approve containment</button></div>}
+              </div>
+            </section>
+          ))}
+        </div>
+      </section>
+
+      <section className="capabilities-section" id="capabilities" data-reveal="capabilities">
+        <div className="section-heading-experience"><p className="experience-kicker">BUILT FOR FRONTLINE TRIAGE</p><h2>One agentic loop for detection, reasoning, briefing, and approval.</h2><p>Aegis is designed for rapid cybersecurity decisions: explainable enough for an analyst, constrained enough for production, and resilient enough to keep working when providers degrade.</p></div>
+        <div className="capability-grid">{capabilityCards.map((card) => { const Icon = card.icon; return <article key={card.title}><span><Icon size={21} /></span><h3>{card.title}</h3><p>{card.copy}</p></article>; })}</div>
+      </section>
+
+      <section className="pipeline-section" data-reveal="pipeline"><div className="section-heading-experience light"><p className="experience-kicker mint">ARCHITECTURE</p><h2>Microphone in. Structured incident response out.</h2></div><div className="pipeline-flow">{timelineSteps.map((step, index) => { const Icon = step.icon; return <div key={step.label} className="pipeline-flow-step"><span><Icon size={22} /></span><b>0{index + 1}</b><strong>{step.label}</strong><p>{step.copy}</p></div>; })}</div></section>
+
+      <section className="security-section" id="security" data-reveal="security"><div className="security-copy"><p className="experience-kicker mint">SECURE BY DESIGN</p><h2>Fast triage does not mean trusting the wrong input.</h2><p>Credentials remain server-side, AI output is schema-validated, evidence files are parsed as untrusted data, and every response action requires explicit operator approval.</p><button className="primary-scroll-button dark" onClick={() => onEnterConsole()}>Open secure console <ArrowRight size={16} /></button></div><div className="security-list">{securityPrinciples.map((principle, index) => <div key={principle}><span>{String(index + 1).padStart(2, '0')}</span><p>{principle}</p><LockKeyhole size={17} /></div>)}</div></section>
+
+      <section className="final-cta" data-reveal="final"><div className="final-cta-glow" /><p className="experience-kicker mint">READY FOR INVESTIGATION</p><h2>Ask Aegis to investigate an identity, endpoint, network spike, or evidence file.</h2><div className="final-actions"><button className="primary-scroll-button" onClick={() => onEnterConsole('Investigate failed logins for m.chen@northstar.io')}>Failed logins <ArrowRight size={16} /></button><button className="primary-scroll-button" onClick={() => onEnterConsole('Review suspicious outbound database traffic on port 443')}>Data exfiltration <ArrowRight size={16} /></button><button className="secondary-scroll-button light" onClick={() => onEnterConsole()}>Live dashboard <ArrowRight size={16} /></button></div></section>
+      <footer className="experience-footer"><div><ShieldCheck size={16} /><strong>Aegis Twin</strong><span>Secured by the Aegis policy engine</span></div><span>Deepgram · Gemini · Murf AI · MITRE ATT&amp;CK</span></footer>
+    </div>
+  );
+}
+
+function ConsoleShell(props: ConsoleShellProps) {
+  const {
+    onBack, incidents, query, activeNav, workspaceView, isCommandPaletteOpen, globalSearch,
+    assetSearch, evidenceReport, isEvidenceAnalyzing, isEvidenceDragging, integrationTesting,
+    isSidebarOpen, isListening, isAnalyzing, isVoiceLoading, pipelineStep, result, integrations,
+    drawerOpen, actionInFlight, showAllIncidents, toast, currentTime, inputRef, fileInputRef,
+    runTriage, handleSubmit, handleMic, handleEvidenceFile, runSampleEvidence, openEvidenceAssessment,
+    handleNav, handleIntegrationTest, handleAction, readBriefing, copyAnalysis, setQuery,
+    setGlobalSearch, setAssetSearch, setIsCommandPaletteOpen, setWorkspaceView, setActiveNav,
+    setIsSidebarOpen, setDrawerOpen, setShowAllIncidents, setEvidenceReport, setIsEvidenceDragging,
+    setToast,
+  } = props;
+
+  const visibleIncidents = useMemo(
+    () => (showAllIncidents ? incidents : incidents.slice(0, 4)),
+    [incidents, showAllIncidents],
+  );
+
+  const visibleAssets = useMemo(() => {
+    const search = assetSearch.trim().toLowerCase();
+    return search
+      ? assetInventory.filter((asset) => [asset.name, asset.id, asset.type, asset.platform, asset.owner].some((value) => value.toLowerCase().includes(search)))
+      : assetInventory;
+  }, [assetSearch]);
+
+  const globalResults = useMemo(() => {
+    const search = globalSearch.trim().toLowerCase();
+    if (!search) return { incidents: [] as Incident[], assets: [] as AssetRecord[] };
+    return {
+      incidents: incidents.filter((incident) => [incident.id, incident.title, incident.entity, incident.source].some((value) => value.toLowerCase().includes(search))).slice(0, 3),
+      assets: assetInventory.filter((asset) => [asset.id, asset.name, asset.type, asset.platform, asset.owner].some((value) => value.toLowerCase().includes(search))).slice(0, 3),
+    };
+  }, [globalSearch, incidents]);
+
+  return (
+    <>
+        <button className="return-experience" onClick={onBack}><ArrowRight size={15} /> Back to dynamic story</button>
       <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="brand">
           <div className="brand-mark"><ShieldCheck size={22} strokeWidth={2.3} /></div>
@@ -1475,8 +1776,60 @@ function App() {
       )}
 
       {toast && <div className="toast" role="status"><CheckCircle2 size={18} /><span>{toast}</span><button onClick={() => setToast('')}><X size={15} /></button></div>}
-    </div>
+    </>
   );
+}
+
+interface ConsoleShellProps {
+  onBack: () => void;
+  incidents: Incident[];
+  query: string;
+  activeNav: string;
+  workspaceView: 'assets' | 'files' | 'integrations' | null;
+  isCommandPaletteOpen: boolean;
+  globalSearch: string;
+  assetSearch: string;
+  evidenceReport: EvidenceFileReport | null;
+  isEvidenceAnalyzing: boolean;
+  isEvidenceDragging: boolean;
+  integrationTesting: keyof Omit<IntegrationStatus, 'mode'> | null;
+  isSidebarOpen: boolean;
+  isListening: boolean;
+  isAnalyzing: boolean;
+  isVoiceLoading: boolean;
+  pipelineStep: number;
+  result: AgentResult | null;
+  integrations: IntegrationStatus;
+  drawerOpen: boolean;
+  actionInFlight: string | null;
+  showAllIncidents: boolean;
+  toast: string;
+  currentTime: Date;
+  inputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement>;
+  runTriage: (command: string) => Promise<void>;
+  handleSubmit: (event: FormEvent) => void;
+  handleMic: () => Promise<void>;
+  handleEvidenceFile: (file: File) => Promise<void>;
+  runSampleEvidence: () => void;
+  openEvidenceAssessment: () => void;
+  handleNav: (label: string, target: string) => void;
+  handleIntegrationTest: (provider: keyof Omit<IntegrationStatus, 'mode'>) => Promise<void>;
+  handleAction: (action: AgentResult['actions'][number]) => Promise<void>;
+  readBriefing: () => Promise<void>;
+  copyAnalysis: () => Promise<void>;
+  setQuery: (value: string) => void;
+  setGlobalSearch: (value: string) => void;
+  setAssetSearch: (value: string) => void;
+  setIsCommandPaletteOpen: (value: boolean | ((open: boolean) => boolean)) => void;
+  setWorkspaceView: (value: 'assets' | 'files' | 'integrations' | null) => void;
+  setActiveNav: (value: string) => void;
+  setIsSidebarOpen: (value: boolean) => void;
+  setDrawerOpen: (value: boolean) => void;
+  setShowAllIncidents: (value: boolean | ((show: boolean) => boolean)) => void;
+  setEvidenceReport: (value: EvidenceFileReport | null) => void;
+  setIsEvidenceDragging: (value: boolean) => void;
+  setToast: (value: string) => void;
 }
 
 function MetricCard({ icon: Icon, iconClass, label, value, detail, detailClass = '', trend }: { icon: typeof Shield; iconClass: string; label: string; value: string; detail: string; detailClass?: string; trend: string }) {

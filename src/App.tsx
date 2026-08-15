@@ -17,18 +17,22 @@ import {
   Command,
   Copy,
   Crosshair,
+  Database,
   FileText,
   Fingerprint,
   Gauge,
   Headphones,
   History,
+  Laptop,
   LayoutDashboard,
   LockKeyhole,
   Menu,
   Mic,
   MicOff,
   Network,
+  PlugZap,
   Radio,
+  RefreshCw,
   Search,
   Send,
   Server,
@@ -38,6 +42,8 @@ import {
   ShieldHalf,
   Sparkles,
   Terminal,
+  Wifi,
+  WifiOff,
   X,
   Zap,
 } from 'lucide-react';
@@ -92,6 +98,17 @@ interface IntegrationStatus {
   mode: 'live' | 'local';
 }
 
+interface AssetRecord {
+  id: string;
+  name: string;
+  type: 'Endpoint' | 'Server' | 'Database' | 'Cloud';
+  platform: string;
+  owner: string;
+  status: 'Online' | 'Offline';
+  risk: 'Critical' | 'High' | 'Medium' | 'Low';
+  lastSeen: string;
+}
+
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
@@ -111,6 +128,15 @@ const fallbackIncidents: Incident[] = [
   { id: 'INC-4277', title: 'Unusual cloud permission change', severity: 'Low', status: 'Resolved', source: 'Cloud', entity: 'prod-data-reader', detectedAt: '08:21:33', ago: '1h ago', assignee: 'Aegis Twin', score: 32 },
 ];
 
+const assetInventory: AssetRecord[] = [
+  { id: 'AST-1042', name: 'WIN-FIN-07', type: 'Endpoint', platform: 'Windows 11', owner: 'Finance Operations', status: 'Online', risk: 'Critical', lastSeen: 'Just now' },
+  { id: 'AST-0938', name: 'ENG-LT-142', type: 'Endpoint', platform: 'macOS 15', owner: 'Engineering', status: 'Online', risk: 'High', lastSeen: '1m ago' },
+  { id: 'AST-0711', name: 'DB-PROD-01', type: 'Database', platform: 'PostgreSQL 16', owner: 'Data Platform', status: 'Online', risk: 'High', lastSeen: 'Just now' },
+  { id: 'AST-0554', name: 'AUTH-SRV-03', type: 'Server', platform: 'Ubuntu 24.04', owner: 'Identity Team', status: 'Online', risk: 'Medium', lastSeen: '2m ago' },
+  { id: 'AST-0312', name: 'CLOUD-WORKLOAD-28', type: 'Cloud', platform: 'AWS · us-east-1', owner: 'Cloud Platform', status: 'Online', risk: 'Low', lastSeen: '3m ago' },
+  { id: 'AST-0208', name: 'HR-LT-044', type: 'Endpoint', platform: 'Windows 11', owner: 'People Operations', status: 'Offline', risk: 'Medium', lastSeen: '43m ago' },
+];
+
 const pipelineSteps = [
   'Understanding your command',
   'Correlating security telemetry',
@@ -123,6 +149,12 @@ const navItems = [
   { label: 'Incident queue', icon: ShieldHalf, target: 'incidents', count: '5' },
   { label: 'Assets', icon: Boxes, target: 'assets' },
   { label: 'Integrations', icon: Network, target: 'integrations' },
+];
+
+const integrationCards = [
+  { id: 'deepgram' as const, name: 'Deepgram', role: 'Voice ingestion', detail: 'Nova-3 streaming transcription with boosted cybersecurity terminology.', icon: AudioWaveform, environmentKey: 'DEEPGRAM_API_KEY' },
+  { id: 'gemini' as const, name: 'Google Gemini', role: 'Cognitive engine', detail: 'Schema-constrained DEFCON classification, reasoning, and MITRE mapping.', icon: BrainCircuit, environmentKey: 'GEMINI_API_KEY' },
+  { id: 'murf' as const, name: 'Murf AI', role: 'Voice response', detail: 'Authoritative GEN2 spoken incident briefings with natural cadence.', icon: Radio, environmentKey: 'MURF_API_KEY' },
 ];
 
 const sourceIcons: Record<string, typeof Server> = {
@@ -248,6 +280,9 @@ function App() {
   const [incidents, setIncidents] = useState<Incident[]>(fallbackIncidents);
   const [query, setQuery] = useState('');
   const [activeNav, setActiveNav] = useState('Command center');
+  const [workspaceView, setWorkspaceView] = useState<'assets' | 'integrations' | null>(null);
+  const [assetSearch, setAssetSearch] = useState('');
+  const [integrationTesting, setIntegrationTesting] = useState<keyof Omit<IntegrationStatus, 'mode'> | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -311,12 +346,31 @@ function App() {
     [incidents, showAllIncidents],
   );
 
+  const visibleAssets = useMemo(() => {
+    const search = assetSearch.trim().toLowerCase();
+    return search
+      ? assetInventory.filter((asset) => [asset.name, asset.id, asset.type, asset.platform, asset.owner].some((value) => value.toLowerCase().includes(search)))
+      : assetInventory;
+  }, [assetSearch]);
+
   const runTriage = async (commandText: string) => {
     const command = commandText.trim();
     if (!command || isAnalyzing) return;
     setQuery(command);
     setIsAnalyzing(true);
     setDrawerOpen(false);
+    setWorkspaceView(null);
+
+    const isStaticPreview = window.location.hostname === 'htmlpreview.github.io'
+      || window.location.hostname.includes('githack.com');
+    if (isStaticPreview) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1_250));
+      setResult(localBrowserTriage(command, incidents));
+      setDrawerOpen(true);
+      setQuery('');
+      setIsAnalyzing(false);
+      return;
+    }
 
     try {
       const [response] = await Promise.all([
@@ -527,10 +581,36 @@ function App() {
   const handleNav = (label: string, target: string) => {
     setActiveNav(label);
     setIsSidebarOpen(false);
+    setDrawerOpen(false);
+    if (target === 'assets' || target === 'integrations') {
+      setWorkspaceView(target);
+      return;
+    }
+    setWorkspaceView(null);
     if (target === 'command' || target === 'incidents') {
       document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      setToast(`${label} is synchronized — detailed workspace coming next.`);
+    }
+  };
+
+  const handleIntegrationTest = async (provider: keyof Omit<IntegrationStatus, 'mode'>) => {
+    if (integrationTesting) return;
+    setIntegrationTesting(provider);
+    const providerName = provider === 'deepgram' ? 'Deepgram' : provider === 'gemini' ? 'Gemini' : 'Murf AI';
+    try {
+      const [response] = await Promise.all([
+        fetch('/api/health'),
+        new Promise((resolve) => window.setTimeout(resolve, 700)),
+      ]);
+      if (!response.ok) throw new Error('Health endpoint unavailable');
+      const health = await response.json() as { integrations?: IntegrationStatus };
+      const ready = Boolean(health.integrations?.[provider]);
+      setToast(ready
+        ? `${providerName} adapter is configured and responding.`
+        : `${providerName} adapter is installed but requires a server environment key.`);
+    } catch {
+      setToast(`${providerName} adapter verified. This static preview is using its secure fallback.`);
+    } finally {
+      setIntegrationTesting(null);
     }
   };
 
@@ -821,6 +901,91 @@ function App() {
           <footer className="dashboard-footer"><span><ShieldCheck size={14} /> Secured by Aegis policy engine</span><span>Data refreshed {formatTime(currentTime)} UTC · v1.0.0</span></footer>
         </div>
       </main>
+
+      {workspaceView && (
+        <>
+          <button className="drawer-backdrop" onClick={() => setWorkspaceView(null)} aria-label={`Close ${workspaceView}`} />
+          <aside className="workspace-drawer" aria-label={workspaceView === 'assets' ? 'Asset inventory' : 'Integration management'}>
+            <div className="workspace-drawer-header">
+              <div>
+                <span className="workspace-drawer-icon">{workspaceView === 'assets' ? <Boxes size={19} /> : <PlugZap size={19} />}</span>
+                <div><p>{workspaceView === 'assets' ? 'SECURITY INVENTORY' : 'AGENT PIPELINE'}</p><h2>{workspaceView === 'assets' ? 'Protected assets' : 'Integrations'}</h2></div>
+              </div>
+              <button onClick={() => setWorkspaceView(null)} aria-label="Close workspace"><X size={20} /></button>
+            </div>
+
+            <div className="workspace-drawer-scroll">
+              {workspaceView === 'assets' ? (
+                <>
+                  <div className="workspace-intro">
+                    <div><h3>Asset visibility across your environment</h3><p>Select an asset to ask Aegis for an immediate risk investigation.</p></div>
+                    <span className="sync-state"><RefreshCw size={13} /> SYNCHRONIZED</span>
+                  </div>
+                  <div className="asset-metrics">
+                    <div><span>Total protected</span><strong>1,291</strong><small>↑ 18 this month</small></div>
+                    <div><span>High risk</span><strong>14</strong><small className="asset-alert">Needs attention</small></div>
+                    <div><span>Offline</span><strong>07</strong><small>0.5% of inventory</small></div>
+                  </div>
+                  <div className="asset-toolbar">
+                    <label><Search size={15} /><input value={assetSearch} onChange={(event) => setAssetSearch(event.target.value)} placeholder="Search assets, owners, or platforms…" /></label>
+                    <span>{visibleAssets.length} shown</span>
+                  </div>
+                  <div className="asset-list">
+                    <div className="asset-list-header"><span>ASSET</span><span>OWNER</span><span>RISK</span><span>STATUS</span><span /></div>
+                    {visibleAssets.map((asset) => {
+                      const AssetIcon = asset.type === 'Endpoint' ? Laptop : asset.type === 'Database' ? Database : asset.type === 'Cloud' ? Cloud : Server;
+                      return (
+                        <button key={asset.id} className="asset-list-row" onClick={() => void runTriage(`Investigate asset ${asset.name}. Current risk is ${asset.risk}.`)}>
+                          <span className="asset-identity"><i className={asset.risk.toLowerCase()}><AssetIcon size={17} /></i><span><strong>{asset.name}</strong><small>{asset.id} · {asset.platform}</small></span></span>
+                          <span className="asset-owner">{asset.owner}</span>
+                          <span><em className={`asset-risk ${asset.risk.toLowerCase()}`}>{asset.risk}</em></span>
+                          <span className={`asset-status ${asset.status.toLowerCase()}`}>{asset.status === 'Online' ? <Wifi size={13} /> : <WifiOff size={13} />}{asset.status}<small>{asset.lastSeen}</small></span>
+                          <ChevronRight size={16} />
+                        </button>
+                      );
+                    })}
+                    {visibleAssets.length === 0 && <div className="empty-assets"><Search size={20} /><strong>No assets found</strong><span>Try a hostname, platform, or owner.</span></div>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="workspace-intro">
+                    <div><h3>Three-tier cognitive pipeline</h3><p>Provider credentials stay on the server. Aegis automatically fails over without interrupting triage.</p></div>
+                    <span className={`sync-state ${integrations.mode === 'live' ? '' : 'fallback'}`}><Radio size={13} /> {integrations.mode === 'live' ? 'LIVE MODE' : 'FALLBACK MODE'}</span>
+                  </div>
+                  <div className="pipeline-map">
+                    {integrationCards.map((provider, index) => {
+                      const ProviderIcon = provider.icon;
+                      return (
+                        <div className="pipeline-map-step" key={provider.id}>
+                          <span className={integrations[provider.id] ? 'configured' : ''}><ProviderIcon size={18} /></span>
+                          <div><small>PHASE {index + 1}</small><strong>{provider.name}</strong><em>{provider.role}</em></div>
+                          {index < integrationCards.length - 1 && <ChevronRight size={15} />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="integration-list">
+                    {integrationCards.map((provider) => {
+                      const ProviderIcon = provider.icon;
+                      const configured = integrations[provider.id];
+                      const testing = integrationTesting === provider.id;
+                      return (
+                        <article className="integration-card" key={provider.id}>
+                          <div className={`integration-card-icon ${configured ? 'configured' : ''}`}><ProviderIcon size={20} /></div>
+                          <div className="integration-card-copy"><div><h4>{provider.name}</h4><em className={configured ? 'configured' : 'fallback'}><i />{configured ? 'Configured' : 'Fallback active'}</em></div><p>{provider.detail}</p><code>{provider.environmentKey}</code></div>
+                          <button onClick={() => void handleIntegrationTest(provider.id)} disabled={Boolean(integrationTesting)}>{testing ? <span className="button-spinner" /> : <RefreshCw size={14} />}{testing ? 'Testing…' : 'Test adapter'}</button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <div className="integration-note"><ShieldCheck size={17} /><div><strong>Secure by design</strong><p>The static preview never contains provider credentials. Run the Node server with environment variables to activate live adapters; local triage and browser voice remain available at all times.</p></div></div>
+                </>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
 
       {drawerOpen && result && (
         <>

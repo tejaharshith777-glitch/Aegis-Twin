@@ -779,7 +779,17 @@ function App() {
           <button className="mobile-menu icon-button" onClick={() => setIsSidebarOpen(true)} aria-label="Open navigation"><Menu size={21} /></button>
           <div className="environment"><span className="live-dot" /> PRODUCTION <span className="environment-divider" /> All systems operational</div>
           <div className="topbar-actions">
-            <button className="search-button" onClick={() => setIsCommandPaletteOpen(true)} aria-haspopup="dialog"><Search size={17} /><span>Search or ask Aegis</span><kbd>⌘ K</kbd></button>
+            <label className="search-button" aria-label="Search or ask Aegis">
+              <Search size={17} />
+              <input
+                value={globalSearch}
+                onFocus={() => setIsCommandPaletteOpen(true)}
+                onClick={() => setIsCommandPaletteOpen(true)}
+                onChange={(event) => { setGlobalSearch(event.target.value); setIsCommandPaletteOpen(true); }}
+                placeholder="Search or ask Aegis"
+              />
+              <kbd>{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘ K' : 'Ctrl K'}</kbd>
+            </label>
             <button className="icon-button notification-button" onClick={() => setToast('You have 2 reviewed notifications.')} aria-label="Notifications"><Bell size={19} /><span /></button>
             <div className="top-time"><strong>{formatTime(currentTime)}</strong><span>UTC</span></div>
           </div>

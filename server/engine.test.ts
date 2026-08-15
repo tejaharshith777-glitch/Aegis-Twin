@@ -7,6 +7,10 @@ test('triages a PowerShell signal as critical', () => {
   assert.equal(result.severity, 'Critical');
   assert.equal(result.category, 'Endpoint compromise');
   assert.equal(result.incident?.id, 'INC-4281');
+  assert.equal(result.defcon, 1);
+  assert.equal(result.source, 'Aegis Local');
+  assert.ok(result.mitreTechniques.some((technique) => technique.id === 'T1059.001'));
+  assert.ok(result.directives.length >= 3);
   assert.ok(result.confidence >= 90);
 });
 

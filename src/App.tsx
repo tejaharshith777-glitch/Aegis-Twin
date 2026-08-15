@@ -2,10 +2,12 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  AudioWaveform,
   Bell,
   BookOpen,
   Bot,
   Boxes,
+  BrainCircuit,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -14,6 +16,7 @@ import {
   Cloud,
   Command,
   Copy,
+  Crosshair,
   FileText,
   Fingerprint,
   Gauge,
@@ -63,8 +66,11 @@ interface AgentResult {
   summary: string;
   category: string;
   severity: Severity;
+  defcon: 1 | 2 | 3;
   confidence: number;
   riskScore: number;
+  source: 'Gemini' | 'Aegis Local';
+  voiceText: string;
   incident?: Incident;
   evidence: Array<{
     label: string;
@@ -73,8 +79,17 @@ interface AgentResult {
     tone: 'danger' | 'warning' | 'neutral' | 'success';
   }>;
   reasoning: string[];
+  mitreTechniques: Array<{ id: string; name: string; tactic: string }>;
+  directives: Array<{ priority: number; action: string; detail: string }>;
   actions: Array<{ id: string; label: string; kind: 'primary' | 'secondary' }>;
   completedAt: string;
+}
+
+interface IntegrationStatus {
+  deepgram: boolean;
+  gemini: boolean;
+  murf: boolean;
+  mode: 'live' | 'local';
 }
 
 interface SpeechRecognitionLike {
@@ -83,7 +98,7 @@ interface SpeechRecognitionLike {
   lang: string;
   start: () => void;
   stop: () => void;
-  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal?: boolean }> }) => void) | null;
   onend: (() => void) | null;
   onerror: (() => void) | null;
 }
@@ -129,24 +144,44 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isVoiceLoading, setIsVoiceLoading] = useState(false);
   const [pipelineStep, setPipelineStep] = useState(0);
   const [result, setResult] = useState<AgentResult | null>(null);
+  const [integrations, setIntegrations] = useState<IntegrationStatus>({ deepgram: false, gemini: false, murf: false, mode: 'local' });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [showAllIncidents, setShowAllIncidents] = useState(false);
   const [toast, setToast] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
   const inputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const deepgramSocketRef = useRef<WebSocket | null>(null);
+  const fallbackRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const fallbackStartedRef = useRef(false);
+  const voiceTranscriptRef = useRef('');
+  const voiceLatestRef = useRef('');
+  const voiceProcessedRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     fetch('/api/incidents')
       .then((response) => (response.ok ? response.json() : Promise.reject()))
       .then((data) => setIncidents(data.incidents))
       .catch(() => undefined);
+    fetch('/api/integrations')
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: IntegrationStatus) => setIntegrations(data))
+      .catch(() => undefined);
 
     const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      deepgramSocketRef.current?.close();
+      fallbackRecognitionRef.current?.stop();
+      audioRef.current?.pause();
+    };
   }, []);
 
   useEffect(() => {
@@ -202,42 +237,180 @@ function App() {
     void runTriage(query);
   };
 
-  const handleMic = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
+  const processVoiceTranscript = (transcript: string) => {
+    const command = transcript.trim();
+    if (!command || voiceProcessedRef.current) return;
+    voiceProcessedRef.current = true;
+    setIsListening(false);
+    void runTriage(command);
+  };
 
+  const stopVoiceCapture = (notifyProvider = true) => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.requestData();
+        recorder.stop();
+      } catch {
+        // The browser may already be finalizing the last audio chunk.
+      }
+    }
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    if (notifyProvider && deepgramSocketRef.current?.readyState === WebSocket.OPEN) {
+      window.setTimeout(() => {
+        if (deepgramSocketRef.current?.readyState === WebSocket.OPEN) {
+          deepgramSocketRef.current.send(JSON.stringify({ type: 'stop' }));
+        }
+      }, 120);
+    }
+    if (notifyProvider && fallbackRecognitionRef.current) {
+      fallbackRecognitionRef.current.stop();
+      fallbackRecognitionRef.current = null;
+    }
+    setIsListening(false);
+  };
+
+  const startBrowserVoiceFallback = () => {
+    if (fallbackStartedRef.current || voiceProcessedRef.current) return;
     const speechWindow = window as typeof window & {
       SpeechRecognition?: new () => SpeechRecognitionLike;
       webkitSpeechRecognition?: new () => SpeechRecognitionLike;
     };
     const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
     if (!Recognition) {
-      setToast('Voice recognition is not available in this browser. You can type a command instead.');
+      setToast('Voice service is unavailable. Type your command and Aegis will still triage it.');
       inputRef.current?.focus();
       return;
     }
 
+    fallbackStartedRef.current = true;
     const recognition = new Recognition();
+    fallbackRecognitionRef.current = recognition;
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
     recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? '';
-      setQuery(transcript);
-      setIsListening(false);
-      if (transcript) void runTriage(transcript);
+      let transcript = '';
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += `${event.results[index]?.[0]?.transcript ?? ''} `;
+      }
+      const cleanTranscript = transcript.trim();
+      if (cleanTranscript) {
+        voiceLatestRef.current = cleanTranscript;
+        setQuery(cleanTranscript);
+      }
     };
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      setIsListening(false);
+      fallbackRecognitionRef.current = null;
+      processVoiceTranscript(voiceLatestRef.current);
+    };
     recognition.onerror = () => {
       setIsListening(false);
-      setToast('I could not hear that clearly. Please try again.');
+      fallbackRecognitionRef.current = null;
+      setToast('I could not hear that clearly. Type your command or try again.');
     };
-    recognitionRef.current = recognition;
-    recognition.start();
     setIsListening(true);
+    setToast('Deepgram is unavailable here. Secure browser transcription is active.');
+    recognition.start();
+  };
+
+  const handleMic = async () => {
+    if (isListening) {
+      stopVoiceCapture();
+      window.setTimeout(() => processVoiceTranscript(voiceLatestRef.current), 1_000);
+      return;
+    }
+    fallbackStartedRef.current = false;
+    voiceProcessedRef.current = false;
+    voiceTranscriptRef.current = '';
+    voiceLatestRef.current = '';
+    if (!integrations.deepgram) {
+      startBrowserVoiceFallback();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      startBrowserVoiceFallback();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      mediaStreamRef.current = stream;
+      voiceTranscriptRef.current = '';
+      voiceLatestRef.current = '';
+      voiceProcessedRef.current = false;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${protocol}//${window.location.host}/api/listen`);
+      deepgramSocketRef.current = socket;
+      setIsListening(true);
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as {
+            type: string;
+            transcript?: string;
+            isFinal?: boolean;
+            speechFinal?: boolean;
+            message?: string;
+          };
+          if (data.type === 'ready') {
+            const preferredType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+              .find((type) => MediaRecorder.isTypeSupported(type));
+            const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
+            mediaRecorderRef.current = recorder;
+            recorder.ondataavailable = (audioEvent) => {
+              if (audioEvent.data.size > 0 && socket.readyState === WebSocket.OPEN) socket.send(audioEvent.data);
+            };
+            recorder.start(250);
+            return;
+          }
+          if (data.type === 'transcript' && data.transcript) {
+            if (data.isFinal) {
+              voiceTranscriptRef.current = `${voiceTranscriptRef.current} ${data.transcript}`.trim();
+            }
+            const liveTranscript = data.isFinal
+              ? voiceTranscriptRef.current
+              : `${voiceTranscriptRef.current} ${data.transcript}`.trim();
+            voiceLatestRef.current = liveTranscript;
+            setQuery(liveTranscript);
+            if (data.speechFinal) {
+              stopVoiceCapture();
+              processVoiceTranscript(voiceTranscriptRef.current || liveTranscript);
+            }
+            return;
+          }
+          if (data.type === 'utterance_end' || data.type === 'closed') {
+            stopVoiceCapture(false);
+            processVoiceTranscript(voiceTranscriptRef.current || voiceLatestRef.current);
+            return;
+          }
+          if (data.type === 'error') {
+            stopVoiceCapture(false);
+            deepgramSocketRef.current = null;
+            startBrowserVoiceFallback();
+          }
+        } catch {
+          // Ignore malformed provider metadata.
+        }
+      };
+      socket.onerror = () => {
+        stopVoiceCapture(false);
+        deepgramSocketRef.current = null;
+        startBrowserVoiceFallback();
+      };
+      socket.onclose = () => {
+        stopVoiceCapture(false);
+        processVoiceTranscript(voiceTranscriptRef.current || voiceLatestRef.current);
+      };
+    } catch {
+      setIsListening(false);
+      setToast('Microphone access was not granted. Allow access, then try again.');
+    }
   };
 
   const handleNav = (label: string, target: string) => {
@@ -276,19 +449,43 @@ function App() {
     }
   };
 
-  const readBriefing = () => {
-    if (!result || !('speechSynthesis' in window)) {
+  const playBrowserVoiceFallback = (text: string) => {
+    if (!('speechSynthesis' in window)) {
       setToast('Spoken briefings are not supported in this browser.');
       return;
     }
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(
-      `${result.severity} severity. ${result.headline}. ${result.summary}`,
-    );
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.96;
-    utterance.pitch = 0.95;
+    utterance.pitch = 0.93;
     window.speechSynthesis.speak(utterance);
-    setToast('Reading your incident briefing aloud.');
+    setToast('Murf is unavailable, so Aegis is using the secure browser voice.');
+  };
+
+  const readBriefing = async () => {
+    if (!result || isVoiceLoading) return;
+    setIsVoiceLoading(true);
+    audioRef.current?.pause();
+    try {
+      if (!integrations.murf) throw new Error('Murf is not configured');
+      const response = await fetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: result.voiceText }),
+      });
+      if (!response.ok) throw new Error('Murf synthesis failed');
+      const audioUrl = URL.createObjectURL(await response.blob());
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+      audio.onerror = () => URL.revokeObjectURL(audioUrl);
+      await audio.play();
+      setToast('Aegis briefing is playing through Murf AI.');
+    } catch {
+      playBrowserVoiceFallback(result.voiceText);
+    } finally {
+      setIsVoiceLoading(false);
+    }
   };
 
   const copyAnalysis = async () => {
@@ -419,6 +616,15 @@ function App() {
                 <button onClick={() => void runTriage('Review suspicious data uploads')}>Data uploads <ArrowRight size={13} /></button>
               </div>
 
+              <div className="integration-ribbon" aria-label="AI integration pipeline">
+                <span className={integrations.deepgram ? 'connected' : ''}><AudioWaveform size={13} /><i /> Deepgram</span>
+                <ChevronRight size={12} />
+                <span className={integrations.gemini ? 'connected' : ''}><BrainCircuit size={13} /><i /> Gemini</span>
+                <ChevronRight size={12} />
+                <span className={integrations.murf ? 'connected' : ''}><Radio size={13} /><i /> Murf AI</span>
+                <em>{integrations.mode === 'live' ? 'LIVE PIPELINE' : 'LOCAL FALLBACK'}</em>
+              </div>
+
               {isAnalyzing && (
                 <div className="analysis-overlay" role="status" aria-live="polite">
                   <div className="scan-line" />
@@ -507,7 +713,13 @@ function App() {
               <div className="drawer-tools"><button onClick={copyAnalysis} aria-label="Copy analysis"><Copy size={17} /></button><button onClick={() => setDrawerOpen(false)} aria-label="Close analysis"><X size={20} /></button></div>
             </div>
             <div className="drawer-scroll">
-              <div className="result-status"><span className={`severity-badge ${result.severity.toLowerCase()}`}><AlertTriangle size={13} /> {result.severity}</span><span>{result.category}</span><span className="confidence"><i style={{ width: `${result.confidence}%` }} />{result.confidence}% confidence</span></div>
+              <div className="result-status">
+                <span className={`defcon-badge defcon-${result.defcon}`}>DEFCON {result.defcon}</span>
+                <span className={`severity-badge ${result.severity.toLowerCase()}`}><AlertTriangle size={13} /> {result.severity}</span>
+                <span>{result.category}</span>
+                <span className="confidence"><i style={{ width: `${result.confidence}%` }} />{result.confidence}% confidence</span>
+              </div>
+              <div className="engine-note"><BrainCircuit size={13} /> Analyzed by {result.source}{result.source === 'Gemini' ? ' · structured through Aegis policy controls' : ' · provider-safe fallback active'}</div>
               <h2>{result.headline}</h2>
               <p className="result-summary">{result.summary}</p>
 
@@ -523,6 +735,27 @@ function App() {
                   <em className={`status-pill ${result.incident.status.toLowerCase()}`}>{result.incident.status}</em>
                 </div>
               )}
+
+              <section className="result-section directive-section">
+                <div className="result-section-title"><span>Immediate directives</span><em>Human approval required</em></div>
+                <ol className="directive-list">
+                  {result.directives.map((directive) => (
+                    <li key={`${directive.priority}-${directive.action}`}>
+                      <span>{String(directive.priority).padStart(2, '0')}</span>
+                      <div><strong>{directive.action}</strong><p>{directive.detail}</p></div>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+
+              <section className="mitre-panel">
+                <div><Crosshair size={17} /><span><strong>MITRE ATT&amp;CK mapping</strong><small>Observed behavior classification</small></span></div>
+                <div className="mitre-tags">
+                  {result.mitreTechniques.map((technique) => (
+                    <span key={technique.id}><b>{technique.id}</b>{technique.name}<small>{technique.tactic}</small></span>
+                  ))}
+                </div>
+              </section>
 
               <section className="result-section">
                 <div className="result-section-title"><span>Correlated evidence</span><em>{result.evidence.length} signals</em></div>
@@ -542,7 +775,7 @@ function App() {
                 </ol>
               </section>
 
-              <button className="spoken-brief" onClick={readBriefing}><Headphones size={17} /><span><strong>Listen to this briefing</strong><small>Voice summary · about 20 seconds</small></span><ChevronRight size={16} /></button>
+              <button className="spoken-brief" onClick={() => void readBriefing()} disabled={isVoiceLoading}><Headphones size={17} /><span><strong>{isVoiceLoading ? 'Generating Murf briefing…' : 'Listen to this briefing'}</strong><small>{integrations.murf ? 'Murf AI voice · about 20 seconds' : 'Secure browser voice fallback'}</small></span>{isVoiceLoading ? <span className="button-spinner" /> : <ChevronRight size={16} />}</button>
             </div>
             <div className="drawer-actions">
               <p><LockKeyhole size={12} /> Actions require your approval</p>

@@ -21,6 +21,18 @@ export interface Evidence {
   tone: 'danger' | 'warning' | 'neutral' | 'success';
 }
 
+export interface MitreTechnique {
+  id: string;
+  name: string;
+  tactic: string;
+}
+
+export interface Directive {
+  priority: number;
+  action: string;
+  detail: string;
+}
+
 export interface AgentResult {
   analysisId: string;
   query: string;
@@ -28,11 +40,16 @@ export interface AgentResult {
   summary: string;
   category: string;
   severity: Severity;
+  defcon: 1 | 2 | 3;
   confidence: number;
   riskScore: number;
+  source: 'Gemini' | 'Aegis Local';
+  voiceText: string;
   incident?: Incident;
   evidence: Evidence[];
   reasoning: string[];
+  mitreTechniques: MitreTechnique[];
+  directives: Directive[];
   actions: Array<{ id: string; label: string; kind: 'primary' | 'secondary' }>;
   completedAt: string;
 }
@@ -238,11 +255,72 @@ function pickScenario(query: string): Scenario {
   return ranked[0]?.score > 0 ? ranked[0].scenario : defaultScenario;
 }
 
+function responsePlan(category: string): { mitreTechniques: MitreTechnique[]; directives: Directive[] } {
+  if (category === 'Endpoint compromise') {
+    return {
+      mitreTechniques: [
+        { id: 'T1059.001', name: 'PowerShell', tactic: 'Execution' },
+        { id: 'T1105', name: 'Ingress Tool Transfer', tactic: 'Command and Control' },
+      ],
+      directives: [
+        { priority: 1, action: 'Isolate the affected endpoint', detail: 'Remove WIN-FIN-07 from the network while preserving EDR access.' },
+        { priority: 2, action: 'Block the destination indicator', detail: 'Deny the observed IP and domain at egress controls.' },
+        { priority: 3, action: 'Preserve volatile evidence', detail: 'Capture process tree, memory, active connections, and the encoded command.' },
+      ],
+    };
+  }
+  if (category === 'Identity compromise') {
+    return {
+      mitreTechniques: [{ id: 'T1110.003', name: 'Password Spraying', tactic: 'Credential Access' }],
+      directives: [
+        { priority: 1, action: 'Revoke active sessions', detail: 'Invalidate tokens for the affected identity immediately.' },
+        { priority: 2, action: 'Force credential reset', detail: 'Require a password reset and phishing-resistant MFA verification.' },
+        { priority: 3, action: 'Review sign-in telemetry', detail: 'Validate source addresses, device fingerprints, and accessed applications.' },
+      ],
+    };
+  }
+  if (category === 'Data exfiltration') {
+    return {
+      mitreTechniques: [
+        { id: 'T1041', name: 'Exfiltration Over C2 Channel', tactic: 'Exfiltration' },
+        { id: 'T1567', name: 'Exfiltration Over Web Service', tactic: 'Exfiltration' },
+      ],
+      directives: [
+        { priority: 1, action: 'Sever external connectivity', detail: 'Restrict egress for the affected cluster or endpoint.' },
+        { priority: 2, action: 'Block unauthorized destinations', detail: 'Apply deny rules for observed remote IPs and domains.' },
+        { priority: 3, action: 'Quantify exposed data', detail: 'Review flow logs, object access, and transfer volume.' },
+      ],
+    };
+  }
+  if (category === 'Phishing') {
+    return {
+      mitreTechniques: [{ id: 'T1566.001', name: 'Spearphishing Attachment', tactic: 'Initial Access' }],
+      directives: [
+        { priority: 1, action: 'Quarantine related messages', detail: 'Remove matching sender, subject, URL, and attachment indicators.' },
+        { priority: 2, action: 'Reset exposed credentials', detail: 'Reset any recipient credentials if interaction is confirmed.' },
+        { priority: 3, action: 'Audit endpoint activity', detail: 'Search for attachment execution and suspicious child processes.' },
+      ],
+    };
+  }
+  return {
+    mitreTechniques: [{ id: 'TA0043', name: 'Reconnaissance Review', tactic: 'Reconnaissance' }],
+    directives: [
+      { priority: 1, action: 'Prioritize the critical queue', detail: 'Continue investigation of the highest-impact active incident.' },
+      { priority: 2, action: 'Verify sensor coverage', detail: 'Restore telemetry for assets that are not reporting.' },
+      { priority: 3, action: 'Monitor control health', detail: 'Escalate any material drop below the operational target.' },
+    ],
+  };
+}
+
 export function triage(query: string): AgentResult {
   const safeQuery = query.trim().slice(0, 1200);
   const scenario = pickScenario(safeQuery);
   const incident = findIncident(safeQuery);
+  const severity = incident?.severity ?? scenario.severity;
   const sequence = Math.floor(Date.now() / 1000).toString(36).toUpperCase();
+  const plan = responsePlan(scenario.category);
+  const defcon: 1 | 2 | 3 = severity === 'Critical' ? 1 : severity === 'High' ? 2 : 3;
+  const voiceText = `DEFCON ${defcon}. ${scenario.headline}. ${scenario.summary} First directive, ${plan.directives[0].action}. ${plan.directives[0].detail}`;
 
   return {
     analysisId: `AX-${sequence}`,
@@ -250,12 +328,17 @@ export function triage(query: string): AgentResult {
     headline: scenario.headline,
     summary: scenario.summary,
     category: scenario.category,
-    severity: incident?.severity ?? scenario.severity,
+    severity,
+    defcon,
     confidence: scenario.confidence,
     riskScore: incident?.score ?? scenario.riskScore,
+    source: 'Aegis Local',
+    voiceText,
     incident,
     evidence: scenario.evidence,
     reasoning: scenario.reasoning,
+    mitreTechniques: plan.mitreTechniques,
+    directives: plan.directives,
     actions: [
       {
         id: incident?.status === 'Contained' ? 'verify' : 'contain',

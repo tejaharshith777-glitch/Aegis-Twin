@@ -12,8 +12,16 @@ A voice-activated AI digital twin for rapid cybersecurity triage and threat miti
 
 The local Aegis policy engine automatically takes over if Gemini is unavailable, so frontline triage does not fail closed during a provider outage.
 
+## Two faces of Aegis Twin
+
+The app ships two experiences behind a hash router:
+
+- `/` — a ten-chapter animated scrolling website (hero, Deepgram, Gemini, Murf, live incident demo, evidence lab, human-control, launch) with chapter navigation, scroll progress, live threat ticker, typing transcripts, radar sweeps, glitch text, and parallax pic layers (`public/lp-*.jpg`).
+- `#/console` — the operational command center (live SOC dashboard, voice triage, evidence file lab, incident queue).
+
 ## Features
 
+- Ten-chapter animated marketing site with scroll reveals, count-ups, live SOC clock, and chapter navigation
 - Live Deepgram voice capture with automatic endpoint detection
 - Gemini-powered DEFCON 1–3 incident classification
 - MITRE ATT&CK technique and tactic mapping

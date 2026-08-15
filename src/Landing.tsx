@@ -5,11 +5,8 @@ import {
   ArrowRight,
   ArrowUpRight,
   AudioWaveform,
-  Bot,
   BrainCircuit,
   Cloud,
-  Code2,
-  Database,
   FileSearch,
   Fingerprint,
   GitBranch,
@@ -17,23 +14,27 @@ import {
   Mail,
   Menu,
   Mic,
-  MicOff,
   Network,
   Radio,
   Send,
-  Server,
   Shield,
   ShieldCheck,
-  ShieldOff,
-  Sparkles,
   Terminal,
   X,
   Zap,
 } from 'lucide-react';
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import footerImg from './assets/lp-footer.jpg';
+import heroImg from './assets/lp-hero.jpg';
+import mindImg from './assets/lp-mind.jpg';
+import socImg from './assets/lp-soc.jpg';
+import speechImg from './assets/lp-speech.jpg';
+import voiceImg from './assets/lp-voice.jpg';
+
+const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- utilities ---------- */
-function useReveal() {
+function useReveal(deps: unknown[] = []) {
   useEffect(() => {
     const els = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'));
     if (!('IntersectionObserver' in window)) { els.forEach((el) => el.classList.add('is-in')); return; }
@@ -43,7 +44,8 @@ function useReveal() {
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
 }
 
 function CountUp({ to, decimals = 0, suffix = '', duration = 1600 }: { to: number; decimals?: number; suffix?: string; duration?: number }) {
@@ -105,19 +107,49 @@ const ovSteps = [
   { icon: ShieldCheck, label: 'Human Approves', desc: 'Action executed' },
 ];
 
+const TICKER = [
+  'INC-4279 · ENCODED POWERSHELL · DEFCON 1',
+  'IDENTITY SPRAY DETECTED · 14K AUTH FAILURES',
+  'MITRE T1059.001 MAPPED · EXECUTION',
+  'OUTBOUND EXFIL BLOCKED · UNKNOWN ASN',
+  'MEAN TIME TO TRIAGE · 42 SECONDS',
+  'VOICE BRIEFING GENERATED · MURF GEN2',
+  'SHA-256 EVIDENCE VERIFIED · 5 RECORDS',
+  'DEEPGRAM NOVA-3 · LATENCY 218MS',
+];
+
+const TRANSCRIPT_SEGMENTS: { text: string; cls: string }[] = [
+  { text: 'Aegis, investigate ', cls: '' },
+  { text: 'encoded PowerShell', cls: 'tx-em' },
+  { text: ' activity on ', cls: '' },
+  { text: 'WIN-FIN-07', cls: 'tx-strong' },
+  { text: '.', cls: '' },
+];
+const TRANSCRIPT_TOTAL = TRANSCRIPT_SEGMENTS.reduce((n, s) => n + s.text.length, 0);
+
 /* =====================================================================
    LANDING COMPONENT
    ===================================================================== */
 export default function Landing() {
-  useReveal();
   const [menuOpen, setMenuOpen] = useState(false);
   const [ch, setCh] = useState(0);
   const [demoIdx, setDemoIdx] = useState(0);
   const [safetyApproved, setSafetyApproved] = useState(false);
   const [ovActive, setOvActive] = useState(-1);
   const [gmActive, setGmActive] = useState(0);
+  const [typed, setTyped] = useState(reduceMotion ? TRANSCRIPT_TOTAL : 0);
+  const [clock, setClock] = useState(() => new Date());
+  const tiltRef = useRef<HTMLDivElement>(null);
+
+  useReveal([demoIdx]);
 
   useEffect(() => { document.body.style.overflow = menuOpen ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [menuOpen]);
+
+  /* ---------- live SOC clock ---------- */
+  useEffect(() => {
+    const id = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   /* ---------- chapter detection ---------- */
   useEffect(() => {
@@ -148,6 +180,43 @@ export default function Landing() {
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  /* ---------- parallax layers ---------- */
+  useEffect(() => {
+    if (reduceMotion) return;
+    const els = Array.from(document.querySelectorAll<HTMLElement>('[data-parallax]'));
+    if (!els.length) return;
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const y = window.scrollY;
+        els.forEach((el) => {
+          const speed = Number(el.dataset.parallax ?? 0.1);
+          el.style.transform = `translate3d(0, ${y * speed}px, 0)`;
+        });
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf); };
+  }, []);
+
+  /* ---------- hero visual mouse tilt ---------- */
+  useEffect(() => {
+    const el = tiltRef.current;
+    if (!el || reduceMotion) return;
+    const onMove = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width - 0.5;
+      const py = (e.clientY - r.top) / r.height - 0.5;
+      el.style.transform = `perspective(900px) rotateY(${px * 7}deg) rotateX(${-py * 7}deg)`;
+    };
+    const onLeave = () => { el.style.transform = 'perspective(900px) rotateY(0deg) rotateX(0deg)'; };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerleave', onLeave);
+    return () => { el.removeEventListener('pointermove', onMove); el.removeEventListener('pointerleave', onLeave); };
   }, []);
 
   /* ---------- overview step sequencing ---------- */
@@ -187,6 +256,29 @@ export default function Landing() {
     return () => io.disconnect();
   }, []);
 
+  /* ---------- deepgram live transcript typing ---------- */
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const el = document.getElementById('dg-transcript');
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setTyping(e.isIntersecting), { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) { setTyped(TRANSCRIPT_TOTAL); return; }
+    if (!typing) return;
+    setTyped(0);
+    let i = 0;
+    const id = setInterval(() => {
+      i += 1;
+      setTyped(i);
+      if (i >= TRANSCRIPT_TOTAL) clearInterval(id);
+    }, 38);
+    return () => clearInterval(id);
+  }, [typing]);
+
   const scrollTo = (id: string) => {
     setMenuOpen(false);
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -195,6 +287,7 @@ export default function Landing() {
   const goNext = () => { if (ch < CHAPTERS.length - 1) scrollTo(CHAPTERS[ch + 1].id); };
 
   const demo = demoIncidents[demoIdx];
+  const clockStr = `${clock.toISOString().slice(0, 10)} · ${clock.toISOString().slice(11, 19)} UTC`;
 
   return (
     <div className="lp">
@@ -243,7 +336,7 @@ export default function Landing() {
           ================================================================= */}
       <section className="ch-hero" id="ch-hero">
         <div className="ch-hero-left">
-          <div className="ch-hero-tag" data-reveal>AEGIS TWIN / 2026</div>
+          <div className="ch-hero-tag glitch" data-reveal data-text="AEGIS TWIN / 2026">AEGIS TWIN / 2026</div>
           <h1 data-reveal>
             <WordStagger text="Your security team," from={0} /><br />
             <WordStagger text="moving at" from={3} /><br />
@@ -262,9 +355,28 @@ export default function Landing() {
             <span>Gemini</span>
             <span>Murf AI</span>
           </div>
+          <div className="ch-hero-clock" data-reveal>
+            <span className="ch-hero-clock-dot" />
+            SYSTEM ONLINE · {clockStr}
+          </div>
         </div>
         <div className="ch-hero-right">
-          <div className="ch-hero-grid-bg" />
+          <div className="ch-hero-img-frame" ref={tiltRef}>
+            <img className="ch-hero-img" src={heroImg} alt="Aegis Twin security operations visual" data-parallax="0.045" />
+            <div className="ch-hero-radar" aria-hidden="true" />
+            <div className="ch-hero-scanline" aria-hidden="true" />
+          </div>
+          <div className="ch-hero-grid-bg" aria-hidden="true" />
+          <div className="ch-hero-particles" aria-hidden="true">
+            {Array.from({ length: 14 }).map((_, i) => (
+              <span key={i} style={{
+                left: `${(i * 37 + 11) % 100}%`,
+                top: `${(i * 53 + 17) % 100}%`,
+                animationDelay: `${(i * 431) % 5000}ms`,
+                animationDuration: `${4200 + ((i * 271) % 3000)}ms`,
+              }} />
+            ))}
+          </div>
           <div className="ch-hero-metric" data-reveal>
             <strong><CountUp to={42} suffix="s" /></strong>
             <small>MEAN TIME TO TRIAGE</small>
@@ -272,6 +384,19 @@ export default function Landing() {
           <div className="ch-hero-scroll"><ArrowDown size={20} /></div>
         </div>
       </section>
+
+      {/* ---------- live threat ticker ---------- */}
+      <div className="lp-ticker" aria-hidden="true">
+        <div className="lp-ticker-track">
+          {[0, 1].map((g) => (
+            <div className="lp-ticker-group" key={g}>
+              {TICKER.map((t, i) => (
+                <span className="lp-ticker-item" key={i}>{t}<span className="lp-ticker-sep">✦</span></span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* =================================================================
           CHAPTER 02 — THE SECURITY PROBLEM
@@ -343,17 +468,26 @@ export default function Landing() {
           <div>
             <div className="ch-dg-waveform" data-reveal>
               {Array.from({ length: 40 }).map((_, i) => (
-                <div key={i} className="ch-dg-bar" style={{ animationDelay: `${i * 0.04}s`, height: `${20 + Math.random() * 65}%` }} />
+                <div key={i} className="ch-dg-bar" style={{ animationDelay: `${i * 0.04}s`, height: `${20 + ((i * 37) % 65)}%` }} />
               ))}
             </div>
-            <div className="ch-dg-transcript" data-reveal>
-              &ldquo;Aegis, investigate <em>encoded PowerShell</em> activity on <strong>WIN-FIN-07</strong>.&rdquo;
+            <div className="ch-dg-transcript" id="dg-transcript" data-reveal>
+              {TRANSCRIPT_SEGMENTS.map((seg, i) => {
+                const before = TRANSCRIPT_SEGMENTS.slice(0, i).reduce((n, s) => n + s.text.length, 0);
+                const visible = Math.max(0, Math.min(seg.text.length, typed - before));
+                return <span key={i} className={seg.cls}>{seg.text.slice(0, visible)}</span>;
+              })}
+              <span className="tx-caret" aria-hidden="true" />
             </div>
             <div className="ch-dg-latency" data-reveal>
               Latency: <strong>218ms</strong> &middot; Confidence: <strong>97.3%</strong>
             </div>
           </div>
           <div>
+            <figure className="lp-figure" data-reveal>
+              <img src={voiceImg} alt="Live audio signal waveform" loading="lazy" />
+              <figcaption>LIVE AUDIO SIGNAL · WEBSOCKET STREAM</figcaption>
+            </figure>
             <div className="ch-dg-terms" data-reveal>
               <span>DDoS</span>
               <span>Kubernetes</span>
@@ -375,42 +509,50 @@ export default function Landing() {
           ================================================================= */}
       <section className="ch-gemini" id="ch-gemini">
         <h2 data-reveal>Gemini / Cognitive Engine</h2>
-        <div className="ch-gemini-pipeline" data-reveal>
-          <div className={`ch-gm-node ${gmActive >= 0 ? 'active' : ''}`}>
-            <Terminal size={20} />
-            <strong>Alert In</strong>
-            <small>SIGNAL</small>
+        <div className="ch-gm-grid">
+          <div>
+            <div className="ch-gemini-pipeline" data-reveal>
+              <div className={`ch-gm-node ${gmActive >= 0 ? 'active' : ''}`}>
+                <Terminal size={20} />
+                <strong>Alert In</strong>
+                <small>SIGNAL</small>
+              </div>
+              <span className="ch-gm-arrow">&rarr;</span>
+              <div className={`ch-gm-node ${gmActive >= 1 ? 'active' : ''}`}>
+                <BrainCircuit size={20} />
+                <strong>DEFCON</strong>
+                <small>CLASSIFY</small>
+              </div>
+              <span className="ch-gm-arrow">&rarr;</span>
+              <div className={`ch-gm-node ${gmActive >= 2 ? 'active' : ''}`}>
+                <Activity size={20} />
+                <strong>Risk</strong>
+                <small>SCORE</small>
+              </div>
+              <span className="ch-gm-arrow">&rarr;</span>
+              <div className={`ch-gm-node ${gmActive >= 3 ? 'active' : ''}`}>
+                <GitBranch size={20} />
+                <strong>MITRE</strong>
+                <small>MAP</small>
+              </div>
+              <span className="ch-gm-arrow">&rarr;</span>
+              <div className={`ch-gm-node ${gmActive >= 4 ? 'active' : ''}`}>
+                <ShieldCheck size={20} />
+                <strong>Directive</strong>
+                <small>ACTION</small>
+              </div>
+            </div>
+            <div className="ch-gm-output" data-reveal>
+              <div className="ch-gm-card"><small>DEFCON LEVEL</small><strong>1</strong></div>
+              <div className="ch-gm-card"><small>RISK SCORE</small><strong>96</strong></div>
+              <div className="ch-gm-card"><small>CONFIDENCE</small><strong>94%</strong></div>
+              <div className="ch-gm-card"><small>CATEGORY</small><strong>Endpoint</strong></div>
+            </div>
           </div>
-          <span className="ch-gm-arrow">&rarr;</span>
-          <div className={`ch-gm-node ${gmActive >= 1 ? 'active' : ''}`}>
-            <BrainCircuit size={20} />
-            <strong>DEFCON</strong>
-            <small>CLASSIFY</small>
-          </div>
-          <span className="ch-gm-arrow">&rarr;</span>
-          <div className={`ch-gm-node ${gmActive >= 2 ? 'active' : ''}`}>
-            <Activity size={20} />
-            <strong>Risk</strong>
-            <small>SCORE</small>
-          </div>
-          <span className="ch-gm-arrow">&rarr;</span>
-          <div className={`ch-gm-node ${gmActive >= 3 ? 'active' : ''}`}>
-            <GitBranch size={20} />
-            <strong>MITRE</strong>
-            <small>MAP</small>
-          </div>
-          <span className="ch-gm-arrow">&rarr;</span>
-          <div className={`ch-gm-node ${gmActive >= 4 ? 'active' : ''}`}>
-            <ShieldCheck size={20} />
-            <strong>Directive</strong>
-            <small>ACTION</small>
-          </div>
-        </div>
-        <div className="ch-gm-output" data-reveal>
-          <div className="ch-gm-card"><small>DEFCON LEVEL</small><strong>1</strong></div>
-          <div className="ch-gm-card"><small>RISK SCORE</small><strong>96</strong></div>
-          <div className="ch-gm-card"><small>CONFIDENCE</small><strong>94%</strong></div>
-          <div className="ch-gm-card"><small>CATEGORY</small><strong>Endpoint</strong></div>
+          <figure className="lp-figure ch-gm-figure" data-reveal>
+            <img src={mindImg} alt="Neural reasoning decision graph" loading="lazy" />
+            <figcaption>GEMINI COGNITION · STRUCTURED REASONING GRAPH</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -420,27 +562,35 @@ export default function Landing() {
       <section className="ch-murf" id="ch-murf">
         <h2 data-reveal>Murf AI / Spoken Response</h2>
         <div className="ch-murf-sub" data-reveal>AUTHORITATIVE VOICE BRIEFING</div>
-        <div className="ch-murf-briefing" data-reveal>
-          <p>
-            &ldquo;<em>DEFCON one</em>. Critical PowerShell activity detected.
-            Isolate the affected endpoint. Preserve memory and process evidence
-            before remediation.&rdquo;
-          </p>
-          <div className="ch-murf-wave">
-            {Array.from({ length: 28 }).map((_, i) => (
-              <span key={i} style={{ animationDelay: `${i * 0.06}s`, height: `${15 + Math.random() * 70}%` }} />
-            ))}
+        <div className="ch-murf-grid">
+          <div>
+            <div className="ch-murf-briefing" data-reveal>
+              <p>
+                &ldquo;<em>DEFCON one</em>. Critical PowerShell activity detected.
+                Isolate the affected endpoint. Preserve memory and process evidence
+                before remediation.&rdquo;
+              </p>
+              <div className="ch-murf-wave">
+                {Array.from({ length: 28 }).map((_, i) => (
+                  <span key={i} style={{ animationDelay: `${i * 0.06}s`, height: `${15 + ((i * 29) % 70)}%` }} />
+                ))}
+              </div>
+            </div>
+            <div className="ch-murf-status" data-reveal>
+              <span className="ch-murf-dot" />
+              Voice generation active &middot; ~18s briefing
+            </div>
+            <div className="ch-murf-fallback" data-reveal>
+              Browser voice fallback available
+            </div>
+            <div data-reveal style={{ marginTop: 24 }}>
+              <a className="ch-btn" href="#/console">Listen in Command Center <Radio size={16} /></a>
+            </div>
           </div>
-        </div>
-        <div className="ch-murf-status" data-reveal>
-          <span className="ch-murf-dot" />
-          Voice generation active &middot; ~18s briefing
-        </div>
-        <div className="ch-murf-fallback" data-reveal>
-          Browser voice fallback available
-        </div>
-        <div data-reveal style={{ marginTop: 24 }}>
-          <a className="ch-btn" href="#/console">Listen in Command Center <Radio size={16} /></a>
+          <figure className="lp-figure" data-reveal>
+            <img src={speechImg} alt="Broadcast of the spoken incident briefing" loading="lazy" />
+            <figcaption>MURF GEN2 · SPOKEN INCIDENT BRIEFING</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -448,6 +598,7 @@ export default function Landing() {
           CHAPTER 07 — INTERACTIVE LIVE INCIDENT DEMO
           ================================================================= */}
       <section className="ch-demo" id="ch-demo">
+        <div className="ch-demo-bg" aria-hidden="true"><img src={socImg} alt="" loading="lazy" /></div>
         <h2 data-reveal>Live Incident Demo</h2>
         <div className="ch-demo-tabs" data-reveal>
           {demoIncidents.map((inc, i) => (
@@ -460,8 +611,8 @@ export default function Landing() {
           <div className="ch-demo-panel-left">
             <div className="ch-demo-defcon">DEFCON {demo.defcon}</div>
             <div className="ch-demo-metrics">
-              <div className="ch-demo-metric"><small>RISK SCORE</small><strong>{demo.risk}</strong></div>
-              <div className="ch-demo-metric"><small>CONFIDENCE</small><strong>{demo.confidence}%</strong></div>
+              <div className="ch-demo-metric"><small>RISK SCORE</small><strong><CountUp key={`risk-${demo.id}`} to={demo.risk} /></strong></div>
+              <div className="ch-demo-metric"><small>CONFIDENCE</small><strong><CountUp key={`conf-${demo.id}`} to={demo.confidence} suffix="%" /></strong></div>
               <div className="ch-demo-metric"><small>SEVERITY</small><strong>{demo.severity}</strong></div>
               <div className="ch-demo-metric"><small>CATEGORY</small><strong>{demo.category}</strong></div>
             </div>
@@ -578,7 +729,11 @@ export default function Landing() {
           CHAPTER 10 — FINAL CTA / PROJECT DETAILS
           ================================================================= */}
       <section className="ch-launch" id="ch-launch">
-        <h2 data-reveal>Ready for the first five minutes?</h2>
+        <div className="ch-launch-bg" data-parallax="0.02" aria-hidden="true">
+          <img src={footerImg} alt="" loading="lazy" />
+          <div className="ch-launch-bg-shade" />
+        </div>
+        <h2 data-reveal className="glitch" data-text="Ready for the first five minutes?">Ready for the first five minutes?</h2>
         <p className="ch-launch-sub" data-reveal>Give your team a cognitive edge.</p>
         <div className="ch-launch-actions" data-reveal>
           <a className="ch-btn" href="#/console">Launch Aegis Twin <ArrowRight size={16} /></a>

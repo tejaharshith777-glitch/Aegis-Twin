@@ -1551,6 +1551,216 @@ button.incident-row:hover {
   animation: fadeIn .2s ease;
 }
 
+.command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  background: rgba(7, 16, 13, .48);
+  border: 0;
+  backdrop-filter: blur(4px);
+  animation: fadeIn .18s ease;
+}
+
+.command-palette {
+  position: fixed;
+  z-index: 170;
+  top: 10vh;
+  left: 50%;
+  width: min(620px, calc(100vw - 28px));
+  overflow: hidden;
+  color: #34433f;
+  background: #fff;
+  border: 1px solid #d9e1dc;
+  border-radius: 11px;
+  box-shadow: 0 28px 90px rgba(4, 18, 13, .28);
+  transform: translateX(-50%);
+  animation: paletteIn .2s ease;
+}
+
+@keyframes paletteIn {
+  from { opacity: 0; transform: translate(-50%, -8px) scale(.985); }
+}
+
+.command-palette > form {
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 17px;
+  border-bottom: 1px solid #e4e9e5;
+}
+
+.command-palette > form > svg {
+  flex: 0 0 auto;
+  color: #278566;
+}
+
+.command-palette > form input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  color: #283a34;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 13px;
+}
+
+.command-palette > form input::placeholder {
+  color: #9aa49f;
+}
+
+.command-palette > form kbd {
+  padding: 4px 6px;
+  color: #7d8985;
+  background: #f1f4f1;
+  border: 1px solid #e1e6e2;
+  border-radius: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 7px;
+}
+
+.command-palette-content {
+  max-height: min(520px, 65vh);
+  overflow-y: auto;
+  padding: 11px;
+  background: #fafbf9;
+}
+
+.palette-label {
+  margin: 7px 8px 6px;
+  color: #8c9894;
+  font-family: 'DM Mono', monospace;
+  font-size: 6px;
+  letter-spacing: .12em;
+}
+
+.palette-actions,
+.palette-result-group {
+  display: grid;
+  gap: 3px;
+}
+
+.palette-actions button,
+.palette-result-group button {
+  width: 100%;
+  min-height: 53px;
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  color: #61706b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.palette-actions button:hover,
+.palette-result-group button:hover {
+  color: #16694f;
+  background: #edf7f2;
+  border-color: #dcece4;
+}
+
+.palette-actions button > svg,
+.palette-result-group button > svg {
+  color: #39836b;
+}
+
+.palette-actions strong,
+.palette-actions small,
+.palette-result-group strong,
+.palette-result-group small {
+  display: block;
+}
+
+.palette-actions strong,
+.palette-result-group strong {
+  overflow: hidden;
+  color: #3a4b45;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-actions small,
+.palette-result-group small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #87928e;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-actions em {
+  color: #71837d;
+  font-style: normal;
+  font-family: 'DM Mono', monospace;
+  font-size: 6px;
+}
+
+.palette-result-group + .palette-result-group {
+  margin-top: 9px;
+  padding-top: 5px;
+  border-top: 1px solid #e8ece9;
+}
+
+.palette-severity {
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-style: normal;
+  font-size: 6px;
+}
+
+.palette-severity.critical { color: #bd4036; background: #ffebe8; }
+.palette-severity.high { color: #9f6015; background: #fff1d9; }
+.palette-severity.medium { color: #386ba8; background: #eaf2fc; }
+.palette-severity.low { color: #19795b; background: #e7f7f0; }
+
+.ask-group button {
+  background: #f2f8f5;
+  border-color: #e1ece6;
+}
+
+.enter-key {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  color: #237c60;
+  background: #dff2e9;
+  border-radius: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+}
+
+.command-palette > footer {
+  height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  color: #929c98;
+  background: #fff;
+  border-top: 1px solid #e5eae6;
+  font-size: 6px;
+}
+
+.command-palette > footer b {
+  margin-right: 3px;
+  padding: 2px 4px;
+  color: #687772;
+  background: #f0f3f0;
+  border: 1px solid #e0e5e1;
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 500;
+}
+
 .workspace-drawer {
   position: fixed;
   z-index: 110;

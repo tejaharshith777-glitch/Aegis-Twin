@@ -281,6 +281,8 @@ function App() {
   const [query, setQuery] = useState('');
   const [activeNav, setActiveNav] = useState('Command center');
   const [workspaceView, setWorkspaceView] = useState<'assets' | 'integrations' | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
   const [assetSearch, setAssetSearch] = useState('');
   const [integrationTesting, setIntegrationTesting] = useState<keyof Omit<IntegrationStatus, 'mode'> | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -327,6 +329,18 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen((open) => !open);
+      }
+      if (event.key === 'Escape') setIsCommandPaletteOpen(false);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(''), 3_000);
     return () => window.clearTimeout(timer);
@@ -353,9 +367,20 @@ function App() {
       : assetInventory;
   }, [assetSearch]);
 
+  const globalResults = useMemo(() => {
+    const search = globalSearch.trim().toLowerCase();
+    if (!search) return { incidents: [] as Incident[], assets: [] as AssetRecord[] };
+    return {
+      incidents: incidents.filter((incident) => [incident.id, incident.title, incident.entity, incident.source].some((value) => value.toLowerCase().includes(search))).slice(0, 3),
+      assets: assetInventory.filter((asset) => [asset.id, asset.name, asset.type, asset.platform, asset.owner].some((value) => value.toLowerCase().includes(search))).slice(0, 3),
+    };
+  }, [globalSearch, incidents]);
+
   const runTriage = async (commandText: string) => {
     const command = commandText.trim();
     if (!command || isAnalyzing) return;
+    setIsCommandPaletteOpen(false);
+    setGlobalSearch('');
     setQuery(command);
     setIsAnalyzing(true);
     setDrawerOpen(false);
@@ -754,7 +779,7 @@ function App() {
           <button className="mobile-menu icon-button" onClick={() => setIsSidebarOpen(true)} aria-label="Open navigation"><Menu size={21} /></button>
           <div className="environment"><span className="live-dot" /> PRODUCTION <span className="environment-divider" /> All systems operational</div>
           <div className="topbar-actions">
-            <button className="search-button" onClick={() => inputRef.current?.focus()}><Search size={17} /><span>Search or ask Aegis</span><kbd>⌘ K</kbd></button>
+            <button className="search-button" onClick={() => setIsCommandPaletteOpen(true)} aria-haspopup="dialog"><Search size={17} /><span>Search or ask Aegis</span><kbd>⌘ K</kbd></button>
             <button className="icon-button notification-button" onClick={() => setToast('You have 2 reviewed notifications.')} aria-label="Notifications"><Bell size={19} /><span /></button>
             <div className="top-time"><strong>{formatTime(currentTime)}</strong><span>UTC</span></div>
           </div>
@@ -901,6 +926,57 @@ function App() {
           <footer className="dashboard-footer"><span><ShieldCheck size={14} /> Secured by Aegis policy engine</span><span>Data refreshed {formatTime(currentTime)} UTC · v1.0.0</span></footer>
         </div>
       </main>
+
+      {isCommandPaletteOpen && (
+        <>
+          <button className="command-palette-backdrop" onClick={() => setIsCommandPaletteOpen(false)} aria-label="Close search" />
+          <section className="command-palette" role="dialog" aria-modal="true" aria-label="Search or ask Aegis">
+            <form onSubmit={(event) => { event.preventDefault(); if (globalSearch.trim()) void runTriage(globalSearch); }}>
+              <Search size={20} />
+              <input autoFocus value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Search incidents and assets, or ask Aegis…" />
+              <kbd>ESC</kbd>
+            </form>
+
+            <div className="command-palette-content">
+              {!globalSearch.trim() ? (
+                <>
+                  <p className="palette-label">QUICK ACTIONS</p>
+                  <div className="palette-actions">
+                    <button onClick={() => void runTriage('Investigate failed logins for m.chen@northstar.io')}><Fingerprint size={17} /><span><strong>Investigate failed logins</strong><small>Identity triage · m.chen@northstar.io</small></span><em>ASK</em></button>
+                    <button onClick={() => void runTriage('Summarize incident INC-4281')}><ShieldHalf size={17} /><span><strong>Open critical incident</strong><small>INC-4281 · suspicious PowerShell</small></span><em>ASK</em></button>
+                    <button onClick={() => { setIsCommandPaletteOpen(false); setActiveNav('Assets'); setWorkspaceView('assets'); }}><Boxes size={17} /><span><strong>Browse protected assets</strong><small>1,291 endpoints, servers, and cloud resources</small></span><ChevronRight size={16} /></button>
+                    <button onClick={() => { setIsCommandPaletteOpen(false); setActiveNav('Integrations'); setWorkspaceView('integrations'); }}><PlugZap size={17} /><span><strong>Check agent integrations</strong><small>Deepgram, Gemini, and Murf AI pipeline</small></span><ChevronRight size={16} /></button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {globalResults.incidents.length > 0 && (
+                    <div className="palette-result-group">
+                      <p className="palette-label">INCIDENTS</p>
+                      {globalResults.incidents.map((incident) => (
+                        <button key={incident.id} onClick={() => void runTriage(`Investigate ${incident.id}: ${incident.title} on ${incident.entity}`)}><ShieldHalf size={16} /><span><strong>{incident.title}</strong><small>{incident.id} · {incident.entity}</small></span><em className={`palette-severity ${incident.severity.toLowerCase()}`}>{incident.severity}</em></button>
+                      ))}
+                    </div>
+                  )}
+                  {globalResults.assets.length > 0 && (
+                    <div className="palette-result-group">
+                      <p className="palette-label">ASSETS</p>
+                      {globalResults.assets.map((asset) => (
+                        <button key={asset.id} onClick={() => void runTriage(`Investigate asset ${asset.name}. Current risk is ${asset.risk}.`)}><Laptop size={16} /><span><strong>{asset.name}</strong><small>{asset.id} · {asset.platform} · {asset.owner}</small></span><em className={`palette-severity ${asset.risk.toLowerCase()}`}>{asset.risk}</em></button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="palette-result-group ask-group">
+                    <p className="palette-label">ASK AEGIS</p>
+                    <button onClick={() => void runTriage(globalSearch)}><Sparkles size={17} /><span><strong>Analyze “{globalSearch}”</strong><small>Run AI security triage with DEFCON and MITRE mapping</small></span><span className="enter-key">↵</span></button>
+                  </div>
+                </>
+              )}
+            </div>
+            <footer><span><b>↑↓</b> Navigate</span><span><b>↵</b> Open or ask</span><span><b>esc</b> Close</span></footer>
+          </section>
+        </>
+      )}
 
       {workspaceView && (
         <>

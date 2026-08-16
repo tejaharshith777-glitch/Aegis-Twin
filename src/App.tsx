@@ -15,6 +15,8 @@ import {
   Layers,
   LockKeyhole,
   Menu,
+  Mic,
+  MicOff,
   Network,
   Play,
   Radar,
@@ -61,6 +63,22 @@ interface AgentResult {
   mitreTechniques: Array<{ id: string; name: string; tactic: string }>;
   directives: Array<{ priority: number; action: string; detail: string }>;
   actions: Array<{ id: string; label: string; kind: 'primary' | 'secondary' }>;
+}
+
+interface SpeechRecognitionErrorEvent {
+  error?: string;
+  message?: string;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal?: boolean }> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -346,6 +364,8 @@ function LiveConsole() {
   const [result, setResult] = useState<AgentResult | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>(fallbackIncidents);
   const [online, setOnline] = useState<boolean | null>(null);
+  const [deepgramAvailable, setDeepgramAvailable] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [actionState, setActionState] = useState<Record<string, 'pending' | 'done'>>({});
   const [logs, setLogs] = useState<LogLine[]>([
     { id: ++logCounter, tone: 'sys', text: 'aegis-twin core v2.4.0 — session initialized' },
@@ -354,6 +374,15 @@ function LiveConsole() {
   ]);
   const logEndRef = useRef<HTMLDivElement | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const deepgramSocketRef = useRef<WebSocket | null>(null);
+  const fallbackRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const fallbackStartedRef = useRef(false);
+  const voiceTranscriptRef = useRef('');
+  const voiceLatestRef = useRef('');
+  const voiceProcessedRef = useRef(false);
 
   const pushLog = useCallback((tone: LogLine['tone'], text: string) => {
     setLogs((previous) => [...previous.slice(-40), { id: ++logCounter, tone, text }]);
@@ -385,10 +414,30 @@ function LiveConsole() {
         if (!cancelled && Array.isArray(data.incidents) && data.incidents.length) setIncidents(data.incidents);
       })
       .catch(() => undefined);
+    fetch('/api/integrations')
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('offline'))))
+      .then((data: { deepgram?: boolean }) => {
+        if (!cancelled && data.deepgram) setDeepgramAvailable(true);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, [pushLog]);
+
+  useEffect(() => {
+    return () => {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      const socket = deepgramSocketRef.current;
+      if (socket) {
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        socket.close();
+      }
+      fallbackRecognitionRef.current?.stop();
+    };
+  }, []);
 
   const localAssessment = useCallback((text: string): AgentResult => {
     const lower = text.toLowerCase();
@@ -453,6 +502,194 @@ function LiveConsole() {
     },
     [busy, query, pushLog, localAssessment],
   );
+
+  /* ---------------- voice capture (Deepgram + browser fallback) ---- */
+
+  const processVoiceTranscript = (transcript: string) => {
+    const command = transcript.trim();
+    if (!command || voiceProcessedRef.current) return;
+    voiceProcessedRef.current = true;
+    setIsListening(false);
+    void runTriage(command);
+  };
+
+  const stopVoiceCapture = (notifyProvider = true) => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.requestData();
+        recorder.stop();
+      } catch {
+        // The browser may already be finalizing the last audio chunk.
+      }
+    }
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    if (notifyProvider && deepgramSocketRef.current?.readyState === WebSocket.OPEN) {
+      window.setTimeout(() => {
+        if (deepgramSocketRef.current?.readyState === WebSocket.OPEN) {
+          deepgramSocketRef.current.send(JSON.stringify({ type: 'stop' }));
+        }
+      }, 120);
+    }
+    if (notifyProvider && fallbackRecognitionRef.current) {
+      fallbackRecognitionRef.current.stop();
+      fallbackRecognitionRef.current = null;
+    }
+    setIsListening(false);
+  };
+
+  const startBrowserVoiceFallback = () => {
+    if (fallbackStartedRef.current || voiceProcessedRef.current) return;
+    try {
+      const speechWindow = window as typeof window & {
+        SpeechRecognition?: new () => SpeechRecognitionLike;
+        webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+      };
+      const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+      if (!Recognition) {
+        pushLog('warn', 'voice service unavailable in this browser — type your command and Aegis will still triage it');
+        inputRef.current?.focus();
+        return;
+      }
+
+      fallbackStartedRef.current = true;
+      const recognition = new Recognition();
+      fallbackRecognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let index = 0; index < event.results.length; index += 1) {
+          transcript += `${event.results[index]?.[0]?.transcript ?? ''} `;
+        }
+        const cleanTranscript = transcript.trim();
+        if (cleanTranscript) {
+          voiceLatestRef.current = cleanTranscript;
+          setQuery(cleanTranscript);
+        }
+      };
+      recognition.onend = () => {
+        setIsListening(false);
+        fallbackRecognitionRef.current = null;
+        processVoiceTranscript(voiceLatestRef.current);
+      };
+      recognition.onerror = (event) => {
+        setIsListening(false);
+        fallbackRecognitionRef.current = null;
+        if (event.error === 'not-allowed') {
+          pushLog('err', 'microphone permission denied — allow access in your browser settings and try again');
+        } else {
+          pushLog('warn', 'could not hear that clearly — type your command or try again');
+        }
+      };
+      setIsListening(true);
+      pushLog('warn', 'deepgram unavailable — secure browser transcription active');
+      recognition.start();
+    } catch {
+      fallbackStartedRef.current = false;
+      setIsListening(false);
+      pushLog('err', 'voice service could not start — type your command and Aegis will still triage it');
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleMic = async () => {
+    if (busy) return;
+    if (isListening) {
+      stopVoiceCapture();
+      window.setTimeout(() => processVoiceTranscript(voiceLatestRef.current), 1_000);
+      return;
+    }
+    fallbackStartedRef.current = false;
+    voiceProcessedRef.current = false;
+    voiceTranscriptRef.current = '';
+    voiceLatestRef.current = '';
+    if (!deepgramAvailable) {
+      startBrowserVoiceFallback();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      startBrowserVoiceFallback();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      mediaStreamRef.current = stream;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${protocol}//${window.location.host}/api/listen`);
+      deepgramSocketRef.current = socket;
+      setIsListening(true);
+      pushLog('sys', 'listening — speak naturally; triage starts when you finish');
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as {
+            type: string;
+            transcript?: string;
+            isFinal?: boolean;
+            speechFinal?: boolean;
+            message?: string;
+          };
+          if (data.type === 'ready') {
+            const preferredType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+              .find((type) => MediaRecorder.isTypeSupported(type));
+            const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
+            mediaRecorderRef.current = recorder;
+            recorder.ondataavailable = (audioEvent) => {
+              if (audioEvent.data.size > 0 && socket.readyState === WebSocket.OPEN) socket.send(audioEvent.data);
+            };
+            recorder.start(250);
+            return;
+          }
+          if (data.type === 'transcript' && data.transcript) {
+            if (data.isFinal) {
+              voiceTranscriptRef.current = `${voiceTranscriptRef.current} ${data.transcript}`.trim();
+            }
+            const liveTranscript = data.isFinal
+              ? voiceTranscriptRef.current
+              : `${voiceTranscriptRef.current} ${data.transcript}`.trim();
+            voiceLatestRef.current = liveTranscript;
+            setQuery(liveTranscript);
+            if (data.speechFinal) {
+              stopVoiceCapture();
+              processVoiceTranscript(voiceTranscriptRef.current || liveTranscript);
+            }
+            return;
+          }
+          if (data.type === 'utterance_end' || data.type === 'closed') {
+            stopVoiceCapture(false);
+            processVoiceTranscript(voiceTranscriptRef.current || voiceLatestRef.current);
+            return;
+          }
+          if (data.type === 'error') {
+            stopVoiceCapture(false);
+            deepgramSocketRef.current = null;
+            startBrowserVoiceFallback();
+          }
+        } catch {
+          // Ignore malformed provider metadata.
+        }
+      };
+      socket.onerror = () => {
+        stopVoiceCapture(false);
+        deepgramSocketRef.current = null;
+        startBrowserVoiceFallback();
+      };
+      socket.onclose = () => {
+        stopVoiceCapture(false);
+        processVoiceTranscript(voiceTranscriptRef.current || voiceLatestRef.current);
+      };
+    } catch {
+      setIsListening(false);
+      pushLog('err', 'microphone access was not granted — allow access, then try again');
+    }
+  };
 
   const runAction = useCallback(
     async (actionId: string, label: string) => {
@@ -603,12 +840,24 @@ function LiveConsole() {
           <form className="console-input" onSubmit={submit}>
             <Terminal size={16} className="input-icon" />
             <input
+              ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Ask Aegis about an alert, identity, or device…"
               maxLength={1200}
               aria-label="Command input"
             />
+            <button
+              type="button"
+              className={`voice-btn ${isListening ? 'listening' : ''}`}
+              onClick={() => void handleMic()}
+              disabled={busy}
+              aria-label={isListening ? 'Stop listening' : 'Start voice command'}
+              aria-pressed={isListening}
+              title={isListening ? 'Stop listening' : 'Start voice command'}
+            >
+              {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
             <button type="submit" className="btn btn-solid btn-sm" disabled={busy || !query.trim()}>
               {busy ? <span className="spinner" /> : <Send size={14} />}
               Run

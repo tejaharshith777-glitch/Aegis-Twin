@@ -107,6 +107,13 @@ const ovSteps = [
   { icon: ShieldCheck, label: 'Human Approves', desc: 'Action executed' },
 ];
 
+const INVESTIGATION_STEPS = [
+  { label: 'Collect evidence', copy: 'Pull raw signals from EDR, identity, network, and email sources.' },
+  { label: 'Correlate telemetry', copy: 'Join entity history, process ancestry, and destination reputation.' },
+  { label: 'Classify and score', copy: 'DEFCON severity, MITRE ATT&CK mapping, and risk scoring.' },
+  { label: 'Verdict and directives', copy: 'Final call with containment steps and operator approval gates.' },
+];
+
 const TICKER = [
   'INC-4279 · ENCODED POWERSHELL · DEFCON 1',
   'IDENTITY SPRAY DETECTED · 14K AUTH FAILURES',
@@ -135,13 +142,15 @@ export default function Landing() {
   const [ch, setCh] = useState(0);
   const [demoIdx, setDemoIdx] = useState(0);
   const [safetyApproved, setSafetyApproved] = useState(false);
+  const [investigation, setInvestigation] = useState<'idle' | 'running' | 'done'>('idle');
+  const [invStep, setInvStep] = useState(0);
   const [ovActive, setOvActive] = useState(-1);
   const [gmActive, setGmActive] = useState(0);
   const [typed, setTyped] = useState(reduceMotion ? TRANSCRIPT_TOTAL : 0);
   const [clock, setClock] = useState(() => new Date());
   const tiltRef = useRef<HTMLDivElement>(null);
 
-  useReveal([demoIdx]);
+  useReveal([demoIdx, investigation]);
 
   useEffect(() => { document.body.style.overflow = menuOpen ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [menuOpen]);
 
@@ -278,6 +287,29 @@ export default function Landing() {
     }, 38);
     return () => clearInterval(id);
   }, [typing]);
+
+  /* ---------- demo full-investigation sequencing (page 4) ---------- */
+  useEffect(() => {
+    if (investigation !== 'running') return;
+    const id = window.setInterval(() => {
+      setInvStep((step) => Math.min(step + 1, INVESTIGATION_STEPS.length));
+    }, 640);
+    return () => window.clearInterval(id);
+  }, [investigation]);
+
+  useEffect(() => {
+    if (investigation === 'running' && invStep >= INVESTIGATION_STEPS.length) {
+      setInvestigation('done');
+    }
+  }, [invStep, investigation]);
+
+  const startInvestigation = () => {
+    setInvStep(0);
+    setInvestigation('running');
+    requestAnimationFrame(() => {
+      document.getElementById('ch-demo')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    });
+  };
 
   const scrollTo = (id: string) => {
     setMenuOpen(false);
@@ -607,6 +639,7 @@ export default function Landing() {
             </button>
           ))}
         </div>
+        {investigation === 'idle' ? (
         <div className="ch-demo-panel" data-reveal key={demo.id}>
           <div className="ch-demo-panel-left">
             <div className="ch-demo-defcon">DEFCON {demo.defcon}</div>
@@ -620,7 +653,7 @@ export default function Landing() {
               {demo.mitre.map(m => <span key={m.id}>{m.id} {m.name}</span>)}
             </div>
             <div className="ch-demo-actions">
-              <button className="ch-btn" style={{ fontSize: 12, padding: '10px 16px' }}>Run Full Investigation</button>
+              <button className="ch-btn" style={{ fontSize: 12, padding: '10px 16px' }} onClick={startInvestigation}>Run Full Investigation <ArrowRight size={13} /></button>
               <a className="ch-btn ch-btn-outline" href="#/console" style={{ fontSize: 12, padding: '10px 16px' }}>Open Command Center</a>
             </div>
           </div>
@@ -642,6 +675,76 @@ export default function Landing() {
             </a>
           </div>
         </div>
+      ) : (
+        <div className="ch-demo-investigation" data-reveal key={`investigation-${demo.id}`}>
+          <div className="ch-inv-head">
+            <span className="ch-inv-pagetag">PAGE 04 · FULL INVESTIGATION</span>
+            <div className="ch-inv-title">
+              <h3>{demo.label}</h3>
+              <em>DEFCON {demo.defcon}</em>
+            </div>
+          </div>
+          <div className="ch-inv-steps">
+            {INVESTIGATION_STEPS.map((step, index) => (
+              <div
+                key={step.label}
+                className={`ch-inv-step ${index < invStep ? 'done' : index === invStep ? 'active' : ''}`}
+              >
+                <span>{index < invStep ? '✓' : String(index + 1).padStart(2, '0')}</span>
+                <div><strong>{step.label}</strong><small>{step.copy}</small></div>
+              </div>
+            ))}
+          </div>
+          {investigation === 'done' ? (
+            <div className="ch-inv-result">
+              <div className="ch-demo-metrics">
+                <div className="ch-demo-metric"><small>RISK SCORE</small><strong><CountUp to={demo.risk} /></strong></div>
+                <div className="ch-demo-metric"><small>CONFIDENCE</small><strong><CountUp to={demo.confidence} suffix="%" /></strong></div>
+                <div className="ch-demo-metric"><small>SEVERITY</small><strong>{demo.severity}</strong></div>
+                <div className="ch-demo-metric"><small>CATEGORY</small><strong>{demo.category}</strong></div>
+              </div>
+              <div className="ch-demo-mitre">
+                {demo.mitre.map(m => <span key={m.id}>{m.id} {m.name}</span>)}
+              </div>
+              <div className="ch-inv-columns">
+                <div className="ch-demo-evidence">
+                  <small>CORRELATED EVIDENCE</small>
+                  <ul style={{ margin: 0, padding: '0 0 0 16px' }}>
+                    {demo.evidence.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+                <div className="ch-demo-evidence">
+                  <small>IMMEDIATE DIRECTIVES</small>
+                  <ul style={{ margin: 0, padding: '0 0 0 16px' }}>
+                    {demo.directives.map((d, i) => <li key={i}>{d}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <div className="ch-inv-timeline">
+                <small>INVESTIGATION TIMELINE</small>
+                <div><span>T+00:04</span>Signal triaged into the active incident queue</div>
+                <div><span>T+00:19</span>Telemetry correlated across EDR, identity, and network</div>
+                <div><span>T+00:37</span>MITRE mapping and DEFCON {demo.defcon} verdict produced</div>
+                <div><span>T+00:41</span>Directives staged for operator approval</div>
+              </div>
+              <div className="ch-inv-actions">
+                <button className="ch-btn ch-btn-outline" style={{ fontSize: 12, padding: '10px 16px' }} onClick={() => setInvestigation('idle')}>
+                  <ArrowLeft size={13} /> Back to incidents
+                </button>
+                <a className="ch-btn" href="#/console" style={{ fontSize: 12, padding: '10px 16px' }}>
+                  Run it live in the Command Center <ArrowRight size={13} />
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="ch-inv-running" role="status" aria-live="polite">
+              <span className="ch-inv-spinner" />
+              <p>AEGIS IS INVESTIGATING</p>
+              <h4>{INVESTIGATION_STEPS[Math.min(invStep, INVESTIGATION_STEPS.length - 1)].label}…</h4>
+            </div>
+          )}
+        </div>
+      )}
       </section>
 
       {/* =================================================================

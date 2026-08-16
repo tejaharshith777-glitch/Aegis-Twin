@@ -1,33 +1,26 @@
 # Aegis Twin
 
-A voice-activated AI digital twin for rapid cybersecurity triage and threat mitigation. Aegis streams an operator’s microphone to Deepgram, applies a constrained Gemini reasoning policy and MITRE ATT&CK mapping, then produces an authoritative spoken briefing with Murf AI.
+An autonomous AI security-operations twin presented through a cinematic, responsive product website. The experience combines an editorial enterprise design system with a working live-triage command surface backed by Deepgram, Gemini, Murf AI, and a resilient local policy engine.
 
-![Aegis Twin](https://img.shields.io/badge/status-operational-41d8a0) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6) ![React](https://img.shields.io/badge/React-18-61dafb)
+![Aegis Twin](https://img.shields.io/badge/status-operational-e65f24) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6) ![React](https://img.shields.io/badge/React-18-61dafb)
 
-## Three-tier agent pipeline
+## Experience
 
-1. **Deepgram ingestion** — streams microphone audio over a server-side WebSocket proxy to Nova-3. Interim and final transcripts appear live in the command bar. Cybersecurity key terms are boosted.
+- Long-form animated product story with scroll reveals, parallax imagery, scan effects, orbiting system visuals, and a reading-progress indicator
+- Bespoke Aegis imagery and an original graphite, warm-ivory, and signal-orange visual identity
+- Responsive desktop, tablet, and mobile navigation and layouts
+- Interactive architecture layers, accordion FAQ, newsletter validation, mobile menu, and operational feedback toasts
+- Working “Run live triage” console with risk scoring, DEFCON severity, response directives, and MITRE ATT&CK mapping
+- Graceful local browser fallback when the hosted API or an external model provider is unavailable
+- Static GitHub Pages build as well as the full Express-powered product experience
+
+## Agent pipeline
+
+1. **Deepgram ingestion** — streams microphone audio over a server-side WebSocket proxy to Nova-3. Cybersecurity key terms are boosted.
 2. **Gemini cognition** — returns a schema-constrained assessment containing DEFCON severity, confidence, risk score, MITRE techniques, evidence, reasoning, ordered directives, and voice-ready text.
-3. **Murf AI vocalization** — generates a concise GEN2 spoken briefing. The browser speech engine is retained as a resilience fallback.
+3. **Murf AI vocalization** — generates a concise GEN2 spoken briefing. Browser speech remains available as a resilience fallback.
 
 The local Aegis policy engine automatically takes over if Gemini is unavailable, so frontline triage does not fail closed during a provider outage.
-
-## Features
-
-- Live Deepgram voice capture with automatic endpoint detection
-- Gemini-powered DEFCON 1–3 incident classification
-- MITRE ATT&CK technique and tactic mapping
-- Explainable evidence, reasoning, confidence, and risk scoring
-- Ordered mitigation directives with human approval boundaries
-- Murf AI incident briefings with secure same-origin audio delivery
-- Endpoint, identity, email, cloud, and network triage
-- Secure CSV, JSON, LOG, and TXT evidence-file analysis
-- Record-level validation, partial-file recovery, SHA-256 evidence checksums, and prompt-injection isolation
-- One-click attack sample for a reliable live hackathon demonstration
-- Human-approved containment and incident-brief workflows
-- Live SOC posture, sensor coverage, incident queue, asset inventory, global search, and activity dashboard
-- Responsive desktop, tablet, and mobile interface
-- Provider keys remain server-side and are never sent to the browser
 
 ## Configure
 

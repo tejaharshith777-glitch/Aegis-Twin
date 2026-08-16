@@ -3376,3 +3376,28 @@ img {
     transform: none;
   }
 }
+
+/* link from command center back to marketing site */
+.back-to-site {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #13805f;
+  text-decoration: none;
+  border: 1px solid #dde3de;
+  border-radius: 8px;
+  padding: 7px 12px;
+  margin-left: 14px;
+  white-space: nowrap;
+  transition: background .2s, color .2s;
+}
+
+.back-to-site:hover {
+  background: #0c1716;
+  color: #fff;
+  border-color: #0c1716;
+}
+
+@media (max-width: 760px) {
+  .back-to-site { display: none; }
+}

@@ -131,6 +131,11 @@ interface EvidenceFileReport {
   processedAt: string;
 }
 
+interface SpeechRecognitionErrorEvent {
+  error?: string;
+  message?: string;
+}
+
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
@@ -139,7 +144,7 @@ interface SpeechRecognitionLike {
   stop: () => void;
   onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal?: boolean }> }) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
 }
 
 const fallbackIncidents: Incident[] = [
@@ -602,47 +607,58 @@ function App() {
 
   const startBrowserVoiceFallback = () => {
     if (fallbackStartedRef.current || voiceProcessedRef.current) return;
-    const speechWindow = window as typeof window & {
-      SpeechRecognition?: new () => SpeechRecognitionLike;
-      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-    };
-    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-    if (!Recognition) {
-      setToast('Voice service is unavailable. Type your command and Aegis will still triage it.');
-      inputRef.current?.focus();
-      return;
-    }
+    try {
+      const speechWindow = window as typeof window & {
+        SpeechRecognition?: new () => SpeechRecognitionLike;
+        webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+      };
+      const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+      if (!Recognition) {
+        setToast('Voice service is unavailable. Type your command and Aegis will still triage it.');
+        inputRef.current?.focus();
+        return;
+      }
 
-    fallbackStartedRef.current = true;
-    const recognition = new Recognition();
-    fallbackRecognitionRef.current = recognition;
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += `${event.results[index]?.[0]?.transcript ?? ''} `;
-      }
-      const cleanTranscript = transcript.trim();
-      if (cleanTranscript) {
-        voiceLatestRef.current = cleanTranscript;
-        setQuery(cleanTranscript);
-      }
-    };
-    recognition.onend = () => {
+      fallbackStartedRef.current = true;
+      const recognition = new Recognition();
+      fallbackRecognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let index = 0; index < event.results.length; index += 1) {
+          transcript += `${event.results[index]?.[0]?.transcript ?? ''} `;
+        }
+        const cleanTranscript = transcript.trim();
+        if (cleanTranscript) {
+          voiceLatestRef.current = cleanTranscript;
+          setQuery(cleanTranscript);
+        }
+      };
+      recognition.onend = () => {
+        setIsListening(false);
+        fallbackRecognitionRef.current = null;
+        processVoiceTranscript(voiceLatestRef.current);
+      };
+      recognition.onerror = (event) => {
+        setIsListening(false);
+        fallbackRecognitionRef.current = null;
+        if (event.error === 'not-allowed') {
+          setToast('Microphone permission was denied. Allow access in your browser settings and try again.');
+        } else {
+          setToast('I could not hear that clearly. Type your command or try again.');
+        }
+      };
+      setIsListening(true);
+      setToast('Deepgram is unavailable here. Secure browser transcription is active.');
+      recognition.start();
+    } catch {
+      fallbackStartedRef.current = false;
       setIsListening(false);
-      fallbackRecognitionRef.current = null;
-      processVoiceTranscript(voiceLatestRef.current);
-    };
-    recognition.onerror = () => {
-      setIsListening(false);
-      fallbackRecognitionRef.current = null;
-      setToast('I could not hear that clearly. Type your command or try again.');
-    };
-    setIsListening(true);
-    setToast('Deepgram is unavailable here. Secure browser transcription is active.');
-    recognition.start();
+      setToast('Voice service could not start. Type your command and Aegis will still triage it.');
+      inputRef.current?.focus();
+    }
   };
 
   const handleMic = async () => {

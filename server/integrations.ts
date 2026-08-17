@@ -1,5 +1,10 @@
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import type { AgentResult, Directive, Evidence, MitreTechnique } from './engine.js';
 import { triage } from './engine.js';
+import { store } from './store.js';
+import { config } from './config.js';
 
 const AEGIS_SYSTEM_INSTRUCTION = `You are Aegis Twin, a voice-activated AI digital twin for rapid cybersecurity triage and threat mitigation.
 
@@ -98,7 +103,7 @@ function asNumber(value: unknown, fallback: number, min = 0, max = 100): number 
   return Number.isFinite(numeric) ? Math.round(Math.max(min, Math.min(max, numeric))) : fallback;
 }
 
-function parseGeminiResult(value: unknown, fallback: AgentResult): AgentResult {
+export function parseGeminiResult(value: unknown, fallback: AgentResult): AgentResult {
   if (!isRecord(value)) throw new Error('Gemini returned an invalid result.');
   const defcon = asNumber(value.defcon, fallback.defcon, 1, 3) as 1 | 2 | 3;
   const severity = defcon === 1 ? 'Critical' : defcon === 2 ? 'High' : 'Medium';
@@ -158,98 +163,204 @@ function parseGeminiResult(value: unknown, fallback: AgentResult): AgentResult {
 
 export function integrationStatus() {
   return {
-    deepgram: Boolean(process.env.DEEPGRAM_API_KEY),
-    gemini: Boolean(process.env.GEMINI_API_KEY),
-    murf: Boolean(process.env.MURF_API_KEY),
-    mode: process.env.GEMINI_API_KEY ? 'live' : 'local',
+    deepgram: Boolean(config.deepgramApiKey),
+    gemini: Boolean(config.geminiApiKey),
+    murf: Boolean(config.murfApiKey),
+    mode: config.geminiApiKey ? 'live' : 'local',
   };
 }
 
+/* Gemini Circuit Breaker State */
+let geminiFailures = 0;
+let geminiCircuitOpenUntil = 0;
+
 export async function triageWithGemini(query: string): Promise<AgentResult> {
   const fallback = triage(query);
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = config.geminiApiKey;
   if (!apiKey) return fallback;
+
+  // Circuit Breaker check
+  if (Date.now() < geminiCircuitOpenUntil) {
+    store.recordProviderCall('Gemini', 0, false, true, 'Circuit breaker open');
+    return { ...fallback, providerDegraded: true };
+  }
 
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const incidentContext = fallback.incident
     ? `Known incident context: ${JSON.stringify(fallback.incident)}`
     : 'No known incident record matched this report. Do not fabricate a matching entity.';
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: AEGIS_SYSTEM_INSTRUCTION }] },
-        contents: [{
-          role: 'user',
-          parts: [{ text: `Triage this transcribed operator report:\n${query}\n\n${incidentContext}` }],
-        }],
-        generationConfig: {
-          temperature: 0.15,
-          maxOutputTokens: 1500,
-          responseMimeType: 'application/json',
-          responseSchema,
+
+  const startTime = Date.now();
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: AEGIS_SYSTEM_INSTRUCTION }] },
+            contents: [{
+              role: 'user',
+              parts: [{ text: `Triage this transcribed operator report:\n${query}\n\n${incidentContext}` }],
+            }],
+            generationConfig: {
+              temperature: 0.15,
+              maxOutputTokens: 1500,
+              responseMimeType: 'application/json',
+              responseSchema,
+            },
+          }),
+          signal: AbortSignal.timeout(25_000),
         },
-      }),
-      signal: AbortSignal.timeout(25_000),
-    },
-  );
+      );
 
-  if (!response.ok) {
-    throw new Error(`Gemini request failed with status ${response.status}.`);
+      const durationMs = Date.now() - startTime;
+
+      if (!response.ok) {
+        if (response.status === 429 || response.status >= 500) {
+          const retryAfterHeader = response.headers.get('retry-after');
+          const backoff = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : Math.min(4000, 500 * Math.pow(2, attempts - 1));
+          if (attempts < maxAttempts) {
+            await new Promise((r) => setTimeout(r, backoff));
+            continue;
+          }
+        }
+        throw new Error(`Gemini request failed with HTTP ${response.status}`);
+      }
+
+      const payload = await response.json() as JsonRecord;
+      const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+      const first = isRecord(candidates[0]) ? candidates[0] : undefined;
+      const finishReason = first ? asString(first.finishReason, 'STOP', 50) : 'STOP';
+
+      if (finishReason === 'MAX_TOKENS' || finishReason === 'SAFETY') {
+        throw new Error(`Gemini finished with abnormal reason: ${finishReason}`);
+      }
+
+      const content = first && isRecord(first.content) ? first.content : undefined;
+      const parts = content && Array.isArray(content.parts) ? content.parts : [];
+      const part = isRecord(parts[0]) ? parts[0] : undefined;
+      const text = part ? asString(part.text, '', 30_000) : '';
+      if (!text) throw new Error('Gemini returned an empty result.');
+
+      const parsed = parseGeminiResult(JSON.parse(text), fallback);
+      store.recordProviderCall('Gemini', durationMs, true, true);
+
+      // Circuit Breaker reset on success
+      if (geminiFailures >= 5) {
+        store.append({
+          type: 'provider.recovered',
+          actor: 'system',
+          payload: { provider: 'Gemini' },
+        });
+      }
+      geminiFailures = 0;
+
+      return parsed;
+    } catch (err: any) {
+      const durationMs = Date.now() - startTime;
+      if (attempts >= maxAttempts) {
+        geminiFailures++;
+        if (geminiFailures >= 5) {
+          geminiCircuitOpenUntil = Date.now() + 60000;
+          store.append({
+            type: 'provider.degraded',
+            actor: 'system',
+            payload: { provider: 'Gemini', reason: err.message, openUntil: geminiCircuitOpenUntil },
+          });
+        }
+        store.recordProviderCall('Gemini', durationMs, false, false, err.message);
+        return { ...fallback, providerDegraded: true };
+      }
+    }
   }
-  const payload = await response.json() as JsonRecord;
-  const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-  const first = isRecord(candidates[0]) ? candidates[0] : undefined;
-  const content = first && isRecord(first.content) ? first.content : undefined;
-  const parts = content && Array.isArray(content.parts) ? content.parts : [];
-  const part = isRecord(parts[0]) ? parts[0] : undefined;
-  const text = part ? asString(part.text, '', 30_000) : '';
-  if (!text) throw new Error('Gemini returned an empty result.');
 
-  return parseGeminiResult(JSON.parse(text), fallback);
+  return { ...fallback, providerDegraded: true };
+}
+
+/* Murf AI Audio Disk Caching */
+const audioCacheDir = path.join(config.dataDir, 'audio');
+if (!fs.existsSync(audioCacheDir)) {
+  fs.mkdirSync(audioCacheDir, { recursive: true });
 }
 
 export async function synthesizeWithMurf(text: string): Promise<{ audio: Buffer; contentType: string }> {
-  const apiKey = process.env.MURF_API_KEY;
+  const apiKey = config.murfApiKey;
   if (!apiKey) throw new Error('Murf is not configured.');
 
-  const response = await fetch('https://api.murf.ai/v1/speech/generate', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': apiKey,
-    },
-    body: JSON.stringify({
-      text: text.trim().slice(0, 1500),
-      voiceId: process.env.MURF_VOICE_ID || 'en-US-terrell',
-      format: 'MP3',
-      modelVersion: 'GEN2',
-      sampleRate: 24_000,
-      channelType: 'MONO',
-      encodeAsBase64: false,
-    }),
-    signal: AbortSignal.timeout(40_000),
-  });
+  const voiceId = process.env.MURF_VOICE_ID || 'en-US-terrell';
+  const textClean = text.trim().slice(0, 1500);
+  const cacheKey = crypto.createHash('sha256').update(voiceId + ':' + textClean).digest('hex');
+  const cacheFilePath = path.join(audioCacheDir, `${cacheKey}.mp3`);
 
-  if (!response.ok) throw new Error(`Murf request failed with status ${response.status}.`);
-  const payload = await response.json() as JsonRecord;
-  const audioFile = asString(payload.audioFile ?? payload.audio_file, '', 3_000);
-  const encodedAudio = asString(payload.encodedAudio ?? payload.encoded_audio, '', 10_000_000);
-
-  if (encodedAudio) {
-    return { audio: Buffer.from(encodedAudio, 'base64'), contentType: 'audio/mpeg' };
+  // Serve from LRU disk cache if exists
+  if (fs.existsSync(cacheFilePath)) {
+    try {
+      const cachedBuffer = fs.readFileSync(cacheFilePath);
+      store.recordProviderCall('Murf AI', 5, true);
+      return { audio: cachedBuffer, contentType: 'audio/mpeg' };
+    } catch {}
   }
-  if (!audioFile || !audioFile.startsWith('https://')) throw new Error('Murf did not return an audio file.');
 
-  const audioResponse = await fetch(audioFile, { signal: AbortSignal.timeout(20_000) });
-  if (!audioResponse.ok) throw new Error('Generated Murf audio could not be downloaded.');
-  return {
-    audio: Buffer.from(await audioResponse.arrayBuffer()),
-    contentType: audioResponse.headers.get('content-type') || 'audio/mpeg',
-  };
+  const startTime = Date.now();
+
+  try {
+    const response = await fetch('https://api.murf.ai/v1/speech/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text: textClean,
+        voiceId,
+        format: 'MP3',
+        modelVersion: 'GEN2',
+        sampleRate: 24_000,
+        channelType: 'MONO',
+        encodeAsBase64: false,
+      }),
+      signal: AbortSignal.timeout(40_000),
+    });
+
+    const durationMs = Date.now() - startTime;
+
+    if (!response.ok) {
+      throw new Error(`Murf request failed with status ${response.status}.`);
+    }
+
+    const payload = await response.json() as JsonRecord;
+    const audioFile = asString(payload.audioFile ?? payload.audio_file, '', 3_000);
+    const encodedAudio = asString(payload.encodedAudio ?? payload.encoded_audio, '', 10_000_000);
+
+    let audioBuf: Buffer;
+    if (encodedAudio) {
+      audioBuf = Buffer.from(encodedAudio, 'base64');
+    } else if (audioFile && audioFile.startsWith('https://')) {
+      const audioResponse = await fetch(audioFile, { signal: AbortSignal.timeout(20_000) });
+      if (!audioResponse.ok) throw new Error('Generated Murf audio could not be downloaded.');
+      audioBuf = Buffer.from(await audioResponse.arrayBuffer());
+    } else {
+      throw new Error('Murf did not return audio content.');
+    }
+
+    // Save to disk cache
+    try {
+      fs.writeFileSync(cacheFilePath, audioBuf);
+    } catch {}
+
+    store.recordProviderCall('Murf AI', durationMs, true);
+    return { audio: audioBuf, contentType: 'audio/mpeg' };
+  } catch (err: any) {
+    store.recordProviderCall('Murf AI', Date.now() - startTime, false, true, err.message);
+    throw err;
+  }
 }

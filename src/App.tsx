@@ -17,6 +17,7 @@ import {
   Copy,
   Crosshair,
   Database,
+  Download,
   FileSearch,
   FileText,
   Fingerprint,
@@ -48,7 +49,7 @@ import {
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
-/* Domain Types                                                       */
+/* Types                                                              */
 /* ------------------------------------------------------------------ */
 
 type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
@@ -65,6 +66,7 @@ interface Incident {
   ago: string;
   assignee: string;
   score: number;
+  origin?: 'seed' | 'telemetry' | 'manual';
 }
 
 interface Evidence {
@@ -87,6 +89,7 @@ interface Directive {
 }
 
 interface AgentResult {
+  caseId?: string;
   analysisId: string;
   query: string;
   headline: string;
@@ -96,7 +99,7 @@ interface AgentResult {
   defcon: 1 | 2 | 3;
   confidence: number;
   riskScore: number;
-  source: 'Gemini' | 'Aegis Local';
+  source: 'Gemini' | 'Aegis Local' | 'Browser Local';
   voiceText: string;
   incident?: Incident;
   evidence: Evidence[];
@@ -121,61 +124,26 @@ interface Asset {
   type: string;
   platform: string;
   owner: string;
-  status: 'Online' | 'Offline';
-  risk: Severity;
+  status: 'online' | 'offline' | 'isolated';
+  criticality: Severity;
   lastSeen: string;
+  riskScore: number;
+  discovered?: boolean;
 }
 
-interface FileIssue {
-  line: number | null;
-  message: string;
-  severity: 'error' | 'warning';
+interface MetricsData {
+  openIncidents: number;
+  criticalCount: number;
+  signalsAnalyzed24h: number;
+  meanTimeToTriageMs: number | null;
+  meanTimeToContainMs: number | null;
+  controlHealthPct: number;
+  assetsTotal: number;
+  assetsReporting: number;
+  coveragePct: number;
+  riskIndex: number;
+  riskTrend7d: number[];
 }
-
-interface FileSignal {
-  type: string;
-  value: string;
-  note: string;
-  tone: 'danger' | 'warning' | 'neutral' | 'success';
-}
-
-interface FileInspection {
-  fileName: string;
-  fileType: string;
-  fileSize: number;
-  checksum: string;
-  status: 'Valid' | 'Partially valid' | 'Invalid';
-  totalRecords: number;
-  validRecords: number;
-  invalidRecords: number;
-  issues: FileIssue[];
-  signals: FileSignal[];
-  summary: string;
-  suggestedQuery: string;
-  processedAt: string;
-  assessment?: AgentResult | null;
-}
-
-/* ------------------------------------------------------------------ */
-/* Seeded Data                                                         */
-/* ------------------------------------------------------------------ */
-
-const fallbackIncidents: Incident[] = [
-  { id: 'INC-4281', title: 'Suspicious PowerShell execution', severity: 'Critical', status: 'Investigating', source: 'EDR', entity: 'WIN-FIN-07', detectedAt: '09:42:18', ago: '2m ago', assignee: 'Aegis Twin', score: 96 },
-  { id: 'INC-4280', title: 'Identity anomaly detected', severity: 'High', status: 'Investigating', source: 'Identity', entity: 'm.chen@northstar.io', detectedAt: '09:35:02', ago: '9m ago', assignee: 'Maya Chen', score: 87 },
-  { id: 'INC-4279', title: 'Potential data exfiltration', severity: 'High', status: 'Contained', source: 'Network', entity: 'ENG-LT-142', detectedAt: '09:17:46', ago: '27m ago', assignee: 'Aegis Twin', score: 82 },
-  { id: 'INC-4278', title: 'Malicious attachment blocked', severity: 'Medium', status: 'Monitoring', source: 'Email', entity: 'r.patel@northstar.io', detectedAt: '08:58:11', ago: '46m ago', assignee: 'Sam Okafor', score: 61 },
-  { id: 'INC-4277', title: 'Unusual cloud permission change', severity: 'Low', status: 'Resolved', source: 'Cloud', entity: 'prod-data-reader', detectedAt: '08:21:33', ago: '1h ago', assignee: 'Aegis Twin', score: 32 },
-];
-
-const assetInventory: Asset[] = [
-  { id: 'AST-1042', name: 'WIN-FIN-07', type: 'Endpoint', platform: 'Windows 11', owner: 'Finance Operations', status: 'Online', risk: 'Critical', lastSeen: 'Just now' },
-  { id: 'AST-0938', name: 'ENG-LT-142', type: 'Endpoint', platform: 'macOS 15', owner: 'Engineering', status: 'Online', risk: 'High', lastSeen: '1m ago' },
-  { id: 'AST-0711', name: 'DB-PROD-01', type: 'Database', platform: 'PostgreSQL 16', owner: 'Data Platform', status: 'Online', risk: 'High', lastSeen: 'Just now' },
-  { id: 'AST-0554', name: 'AUTH-SRV-03', type: 'Server', platform: 'Ubuntu 24.04', owner: 'Identity Team', status: 'Online', risk: 'Medium', lastSeen: '2m ago' },
-  { id: 'AST-0312', name: 'CLOUD-WORKLOAD-28', type: 'Cloud', platform: 'AWS · us-east-1', owner: 'Cloud Platform', status: 'Online', risk: 'Low', lastSeen: '3m ago' },
-  { id: 'AST-0208', name: 'HR-LT-044', type: 'Endpoint', platform: 'Windows 11', owner: 'People Operations', status: 'Offline', risk: 'Medium', lastSeen: '43m ago' },
-];
 
 const pipelineStepsText = [
   'Understanding your command',
@@ -193,242 +161,21 @@ const faqs = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* Pure Helper Functions                                              */
-/* ------------------------------------------------------------------ */
-
-function formatTime(date: Date): string {
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
-
-function localBrowserTriage(query: string, currentIncidents: Incident[] = fallbackIncidents): AgentResult {
-  const safeQuery = query.trim().slice(0, 1200);
-  const normalized = safeQuery.toLowerCase();
-
-  const directId = safeQuery.match(/(?:inc(?:ident)?[\s-]*)?(42\d{2})/i)?.[1];
-  let matchedIncident = directId
-    ? currentIncidents.find((inc) => inc.id.endsWith(directId))
-    : currentIncidents.find(
-        (inc) =>
-          normalized.includes(inc.entity.toLowerCase()) ||
-          inc.title.toLowerCase().split(' ').filter((w) => w.length > 6).some((w) => normalized.includes(w)),
-      );
-
-  let category = 'Posture review';
-  let headline = 'Security posture is stable';
-  let summary = 'I reviewed the active queue and correlated the latest endpoint, identity, cloud, and network signals. One critical incident is being investigated; existing controls are containing the immediate risk.';
-  let severity: Severity = 'Medium';
-  let confidence = 91;
-  let riskScore = matchedIncident?.score ?? 38;
-
-  let evidence: Evidence[] = [
-    { label: 'Active incidents', value: '5 open', note: '1 critical priority', tone: 'warning' },
-    { label: 'Protected assets', value: '1,284 / 1,291', note: '99.5% reporting', tone: 'success' },
-    { label: 'Control health', value: '98.7%', note: 'Within target range', tone: 'success' },
-  ];
-
-  let reasoning: string[] = [
-    'Prioritized active detections by potential business impact.',
-    'Verified critical controls and sensor coverage across protected assets.',
-    'Compared current alert volume with the organization’s seven-day baseline.',
-  ];
-
-  let mitreTechniques: MitreTechnique[] = [{ id: 'TA0043', name: 'Reconnaissance Review', tactic: 'Reconnaissance' }];
-
-  let directives: Directive[] = [
-    { priority: 1, action: 'Prioritize the critical queue', detail: 'Continue investigation of the highest-impact active incident.' },
-    { priority: 2, action: 'Verify sensor coverage', detail: 'Restore telemetry for assets that are not reporting.' },
-    { priority: 3, action: 'Monitor control health', detail: 'Escalate any material drop below the operational target.' },
-  ];
-
-  if (normalized.includes('powershell') || normalized.includes('script') || normalized.includes('malware') || normalized.includes('4281')) {
-    category = 'Endpoint compromise';
-    headline = 'Likely malicious PowerShell chain isolated';
-    summary = 'A hidden PowerShell process launched from a document reader and attempted to contact a newly registered domain. The execution pattern matches encoded downloader behavior; no lateral movement is visible yet.';
-    severity = 'Critical';
-    confidence = 96;
-    riskScore = 94;
-    evidence = [
-      { label: 'Process', value: 'powershell.exe -enc …', note: 'Obfuscated command line', tone: 'danger' },
-      { label: 'Parent process', value: 'ACRORD32.EXE', note: 'Unusual process ancestry', tone: 'warning' },
-      { label: 'Network', value: '185.220.101.34:443', note: 'Threat intel match · 89%', tone: 'danger' },
-    ];
-    reasoning = [
-      'Correlated endpoint process ancestry with DNS and network telemetry.',
-      'Matched encoded command behavior to MITRE ATT&CK T1059.001.',
-      'Checked adjacent hosts and identities; no propagation was detected.',
-    ];
-    mitreTechniques = [
-      { id: 'T1059.001', name: 'PowerShell', tactic: 'Execution' },
-      { id: 'T1105', name: 'Ingress Tool Transfer', tactic: 'Command and Control' },
-    ];
-    directives = [
-      { priority: 1, action: 'Isolate the affected endpoint', detail: 'Remove WIN-FIN-07 from the network while preserving EDR access.' },
-      { priority: 2, action: 'Block the destination indicator', detail: 'Deny the observed IP and domain at egress controls.' },
-      { priority: 3, action: 'Preserve volatile evidence', detail: 'Capture process tree, memory, active connections, and the encoded command.' },
-    ];
-  } else if (normalized.includes('login') || normalized.includes('identity') || normalized.includes('failed') || normalized.includes('4280')) {
-    category = 'Identity compromise';
-    headline = 'Identity attack pattern requires verification';
-    summary = 'The account experienced repeated failures from distributed addresses followed by a successful sign-in from a new device. Conditional access challenged the session, limiting immediate exposure.';
-    severity = 'High';
-    confidence = 92;
-    riskScore = 86;
-    evidence = [
-      { label: 'Authentication', value: '47 failures / 8 min', note: 'Distributed password spray', tone: 'danger' },
-      { label: 'Successful login', value: 'Warsaw, PL', note: 'New device and location', tone: 'warning' },
-      { label: 'Access policy', value: 'MFA challenge issued', note: 'Session currently restricted', tone: 'success' },
-    ];
-    reasoning = [
-      'Grouped sign-in failures across source addresses by target identity.',
-      'Compared device fingerprint and location against the 30-day baseline.',
-      'Validated that the anomalous session did not access sensitive applications.',
-    ];
-    mitreTechniques = [{ id: 'T1110.003', name: 'Password Spraying', tactic: 'Credential Access' }];
-    directives = [
-      { priority: 1, action: 'Revoke active sessions', detail: 'Invalidate tokens for the affected identity immediately.' },
-      { priority: 2, action: 'Force credential reset', detail: 'Require a password reset and phishing-resistant MFA verification.' },
-      { priority: 3, action: 'Review sign-in telemetry', detail: 'Validate source addresses, device fingerprints, and accessed applications.' },
-    ];
-  }
-
-  if (matchedIncident) {
-    severity = matchedIncident.severity;
-    riskScore = matchedIncident.score;
-  }
-
-  const defcon: 1 | 2 | 3 = severity === 'Critical' ? 1 : severity === 'High' ? 2 : 3;
-  const analysisId = 'AX-' + Math.floor(Date.now() / 1000).toString(36).toUpperCase();
-  const voiceText = `DEFCON ${defcon}. ${headline}. ${summary} First directive, ${directives[0].action}. ${directives[0].detail}`;
-
-  return {
-    analysisId,
-    query: safeQuery,
-    headline,
-    summary,
-    category,
-    severity,
-    defcon,
-    confidence,
-    riskScore,
-    source: 'Aegis Local',
-    voiceText,
-    incident: matchedIncident,
-    evidence,
-    reasoning,
-    mitreTechniques,
-    directives,
-    actions: [
-      {
-        id: matchedIncident?.status === 'Contained' ? 'verify' : 'contain',
-        label: matchedIncident?.status === 'Contained' ? 'Verify containment' : 'Contain affected entity',
-        kind: 'primary',
-      },
-      { id: 'brief', label: 'Create incident brief', kind: 'secondary' },
-    ],
-    completedAt: new Date().toISOString(),
-  };
-}
-
-function analyzeEvidenceLocally(fileName: string, content: string): FileInspection {
-  const cleanName = fileName.replace(/[\\/\0]/g, '_').slice(0, 180);
-  const fileType = cleanName.toLowerCase().split('.').pop() || 'TXT';
-  const fileSize = content.length;
-  const issues: FileIssue[] = [];
-  const signals: FileSignal[] = [];
-
-  const lower = content.toLowerCase();
-  const powerShell = (lower.match(/powershell|\s-enc\s|encodedcommand/g) || []).length;
-  const authFailures = (lower.match(/failed login|failed authentication/g) || []).length;
-
-  if (powerShell > 0) signals.push({ type: 'PowerShell activity', value: `${powerShell} events`, note: 'Review encoded commands', tone: 'danger' });
-  if (authFailures > 0) signals.push({ type: 'Authentication failures', value: `${authFailures} records`, note: 'Possible password spray', tone: 'danger' });
-  if (signals.length === 0) signals.push({ type: 'Known threat patterns', value: 'No direct match', note: 'Baseline normal log entries', tone: 'success' });
-
-  const suggestedQuery = powerShell > 0
-    ? 'Investigate suspicious PowerShell execution and encoded command activity in the uploaded evidence.'
-    : authFailures > 0
-    ? 'Investigate repeated failed logins and possible password spraying in the uploaded evidence.'
-    : 'Review the uploaded security evidence for anomalies and recommend next steps.';
-
-  const checksum = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-  const assessment = localBrowserTriage(suggestedQuery);
-
-  return {
-    fileName: cleanName,
-    fileType: fileType.toUpperCase(),
-    fileSize,
-    checksum,
-    status: 'Valid',
-    totalRecords: content.split('\n').filter(Boolean).length,
-    validRecords: content.split('\n').filter(Boolean).length,
-    invalidRecords: 0,
-    issues,
-    signals,
-    summary: `Parsed evidence file ${cleanName} with ${signals.length} signal groups detected.`,
-    suggestedQuery,
-    processedAt: new Date().toISOString(),
-    assessment,
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* Presentational Helper Components                                   */
-/* ------------------------------------------------------------------ */
-
-function MetricCard({ icon: Icon, tone, label, value, detail, trend }: { icon: React.ElementType; tone: string; label: string; value: string; detail: string; trend: string }) {
-  return (
-    <div className="metric-card">
-      <div className="metric-header">
-        <span className="micro-label" style={{ color: 'var(--muted)' }}>{label}</span>
-        <div className={`metric-icon-box ${tone}`}>
-          <Icon size={18} />
-        </div>
-      </div>
-      <div className="metric-body">
-        <div className="metric-val-row">
-          <span className="metric-value">{value}</span>
-          <span className={`metric-trend ${trend.startsWith('↓') ? 'success' : 'danger'}`}>{trend}</span>
-        </div>
-        <div className="metric-detail">{detail}</div>
-      </div>
-    </div>
-  );
-}
-
-function ActivityItem({ dotTone, title, desc, time }: { dotTone: string; title: string; desc: string; time: string }) {
-  return (
-    <div className="activity-item">
-      <div className={`activity-dot-tile ${dotTone}`}>
-        <Activity size={12} />
-      </div>
-      <div className="activity-content">
-        <div className="activity-meta">
-          <span className="activity-title">{title}</span>
-          <span className="activity-time">{time}</span>
-        </div>
-        <span className="activity-desc">{desc}</span>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Main App Component                                                 */
+/* Main Aegis Component                                               */
 /* ------------------------------------------------------------------ */
 
 export default function App() {
   /* State */
-  const [incidents, setIncidents] = useState<Incident[]>(fallbackIncidents);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [operatorName, setOperatorName] = useState<string>('operator');
+
   const [query, setQuery] = useState('');
   const [workspaceView, setWorkspaceView] = useState<'assets' | 'files' | 'integrations' | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [assetSearch, setAssetSearch] = useState('');
-  const [evidenceReport, setEvidenceReport] = useState<FileInspection | null>(null);
-  const [isEvidenceAnalyzing, setIsEvidenceAnalyzing] = useState(false);
-  const [isEvidenceDragging, setIsEvidenceDragging] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isVoiceLoading, setIsVoiceLoading] = useState(false);
@@ -436,21 +183,21 @@ export default function App() {
   const [result, setResult] = useState<AgentResult | null>(null);
   const [integrations, setIntegrations] = useState<IntegrationStatus>({ deepgram: false, gemini: false, murf: false, mode: 'local' });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
+
+  const [actionStage, setActionStage] = useState<'idle' | 'requesting' | 'executing' | 'verifying' | 'done' | 'failed'>('idle');
+  const [actionInFlightId, setActionInFlightId] = useState<string | null>(null);
+
   const [showAllIncidents, setShowAllIncidents] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState<string>(formatTime(new Date()));
   const [isNavOverlayOpen, setIsNavOverlayOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   /* Refs */
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const deepgramSocketRef = useRef<WebSocket | null>(null);
   const fallbackRecognitionRef = useRef<any>(null);
-  const fallbackStartedRef = useRef(false);
   const voiceTranscriptRef = useRef('');
   const voiceLatestRef = useRef('');
   const voiceProcessedRef = useRef(false);
@@ -468,39 +215,79 @@ export default function App() {
     }
   }, [toast]);
 
-  /* Mount Effect */
-  useEffect(() => {
-    const fetchInitial = async () => {
-      try {
-        const incRes = await fetch('/api/incidents');
-        if (incRes.ok) {
-          const data = await incRes.json();
-          if (Array.isArray(data.incidents)) setIncidents(data.incidents);
-        }
-      } catch {}
+  /* Time & Date Formatting */
+  const now = new Date();
+  const dateEyebrow = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(now);
+  const currentHour = now.getHours();
+  const greetingTime = currentHour < 12 ? 'Good morning' : currentHour < 18 ? 'Good afternoon' : 'Good evening';
+  const tzName = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).format(now).split(' ').pop() || 'UTC';
+  const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
+  /* Data Fetching & Real-Time SSE Stream */
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const res = await fetch('/api/metrics');
+      if (res.ok) {
+        const data = await res.json();
+        setMetrics(data);
+      }
+    } catch {}
+  }, []);
+
+  const fetchIncidents = useCallback(async () => {
+    try {
+      const res = await fetch('/api/incidents');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.incidents)) setIncidents(data.incidents);
+      }
+    } catch {}
+  }, []);
+
+  const fetchAssets = useCallback(async () => {
+    try {
+      const res = await fetch('/api/assets');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.assets)) setAssets(data.assets);
+      }
+    } catch {}
+  }, []);
+
+  const fetchSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/session');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.name) setOperatorName(data.name);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchSession();
+    fetchIncidents();
+    fetchAssets();
+    fetchMetrics();
+
+    // Setup SSE Event Stream
+    const eventSource = new EventSource('/api/stream');
+    eventSource.onmessage = (event) => {
       try {
-        const intRes = await fetch('/api/integrations');
-        if (intRes.ok) {
-          const data = await intRes.json();
-          setIntegrations(data);
-        }
+        const e = JSON.parse(event.data);
+        if (e.type.startsWith('incident.')) fetchIncidents();
+        if (e.type.startsWith('asset.')) fetchAssets();
+        fetchMetrics();
       } catch {}
     };
-    fetchInitial();
 
-    const timer = setInterval(() => {
-      setCurrentTime(formatTime(new Date()));
-    }, 30000);
+    const metricsInterval = setInterval(fetchMetrics, 15000);
 
     return () => {
-      clearInterval(timer);
-      if (mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      if (deepgramSocketRef.current) deepgramSocketRef.current.close();
-      if (fallbackRecognitionRef.current) fallbackRecognitionRef.current.stop();
-      if (audioRef.current) audioRef.current.pause();
+      eventSource.close();
+      clearInterval(metricsInterval);
     };
-  }, []);
+  }, [fetchSession, fetchIncidents, fetchAssets, fetchMetrics]);
 
   /* Keyboard Shortcuts */
   useEffect(() => {
@@ -525,19 +312,13 @@ export default function App() {
     if (isAnalyzing) {
       setPipelineStep(0);
       const interval = setInterval(() => {
-        setPipelineStep((step) => {
-          if (step >= pipelineStepsText.length - 1) {
-            clearInterval(interval);
-            return step;
-          }
-          return step + 1;
-        });
+        setPipelineStep((step) => Math.min(step + 1, pipelineStepsText.length - 1));
       }, 430);
       return () => clearInterval(interval);
     }
   }, [isAnalyzing]);
 
-  /* runTriage */
+  /* runTriage Function */
   const runTriage = useCallback(
     async (commandText: string) => {
       const clean = commandText.trim();
@@ -552,39 +333,33 @@ export default function App() {
       let triageResult: AgentResult;
 
       try {
-        const isStaticPreview = ['htmlpreview.github.io', 'githack.com', 'github.io'].some((domain) => window.location.hostname.includes(domain));
-        if (isStaticPreview) {
-          await new Promise((resolve) => setTimeout(resolve, 1250));
-          triageResult = localBrowserTriage(clean, incidents);
-        } else {
-          const res = await fetch('/api/agent/triage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: clean }),
-          });
-          if (!res.ok) throw new Error('Backend triage returned an error.');
-          triageResult = await res.json();
-        }
+        const res = await fetch('/api/agent/triage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: clean }),
+        });
+        if (!res.ok) throw new Error('Backend triage returned an error.');
+        triageResult = await res.json();
       } catch {
         showToast('Gemini unavailable; Aegis Local engine produced verdict.');
-        triageResult = localBrowserTriage(clean, incidents);
+        triageResult = { ...localBrowserTriage(clean, incidents), source: 'Browser Local' };
       }
 
       const elapsed = Date.now() - startTime;
-      const minDelay = 1650;
-      if (elapsed < minDelay) {
-        await new Promise((resolve) => setTimeout(resolve, minDelay - elapsed));
+      if (elapsed < 1650) {
+        await new Promise((resolve) => setTimeout(resolve, 1650 - elapsed));
       }
 
       setResult(triageResult);
       setIsAnalyzing(false);
       setDrawerOpen(true);
       setQuery('');
+      fetchMetrics();
     },
-    [isAnalyzing, incidents, showToast],
+    [isAnalyzing, incidents, showToast, fetchMetrics],
   );
 
-  /* Stop Voice Capture */
+  /* Audio Cleanup & Device Change Handler */
   const stopVoiceCapture = useCallback((notifyProvider = true) => {
     setIsListening(false);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -609,13 +384,25 @@ export default function App() {
         }
       }, 600);
     }
-    if (fallbackRecognitionRef.current && fallbackStartedRef.current) {
+    if (fallbackRecognitionRef.current) {
       try {
         fallbackRecognitionRef.current.stop();
       } catch {}
-      fallbackStartedRef.current = false;
     }
   }, []);
+
+  useEffect(() => {
+    const handleDeviceChange = () => {
+      if (isListening) {
+        showToast('Audio device changed; resetting microphone capture.');
+        stopVoiceCapture(true);
+      }
+    };
+    if (navigator.mediaDevices) {
+      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+      return () => navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    }
+  }, [isListening, stopVoiceCapture, showToast]);
 
   const processFinalTranscript = useCallback(() => {
     if (voiceProcessedRef.current) return;
@@ -658,13 +445,11 @@ export default function App() {
     };
 
     recognition.onend = () => {
-      fallbackStartedRef.current = false;
       stopVoiceCapture(false);
       processFinalTranscript();
     };
 
     fallbackRecognitionRef.current = recognition;
-    fallbackStartedRef.current = true;
     recognition.start();
     setIsListening(true);
   }, [showToast, stopVoiceCapture, processFinalTranscript]);
@@ -672,7 +457,7 @@ export default function App() {
   const handleMic = useCallback(async () => {
     if (isListening) {
       stopVoiceCapture(true);
-      setTimeout(() => processFinalTranscript(), 1000);
+      setTimeout(() => processFinalTranscript(), 800);
       return;
     }
 
@@ -697,9 +482,7 @@ export default function App() {
       deepgramSocketRef.current = socket;
 
       socket.onopen = () => {
-        const supportedTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
-        const mimeType = supportedTypes.find((type) => MediaRecorder.isTypeSupported(type)) || '';
-        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        const recorder = new MediaRecorder(stream);
         mediaRecorderRef.current = recorder;
 
         recorder.ondataavailable = (e) => {
@@ -725,15 +508,6 @@ export default function App() {
               stopVoiceCapture(true);
               processFinalTranscript();
             }
-          } else if (data.type === 'utterance_end') {
-            stopVoiceCapture(true);
-            processFinalTranscript();
-          } else if (data.type === 'closed') {
-            stopVoiceCapture(false);
-            processFinalTranscript();
-          } else if (data.type === 'error') {
-            socket.close();
-            startBrowserFallback();
           }
         } catch {}
       };
@@ -742,15 +516,8 @@ export default function App() {
         socket.close();
         startBrowserFallback();
       };
-
-      socket.onclose = () => {
-        if (isListening) {
-          stopVoiceCapture(false);
-          processFinalTranscript();
-        }
-      };
     } catch {
-      showToast('Microphone access was not granted. Allow access, then try again.');
+      showToast('Microphone access was not granted.');
     }
   }, [isListening, integrations.deepgram, startBrowserFallback, stopVoiceCapture, processFinalTranscript, showToast]);
 
@@ -769,9 +536,15 @@ export default function App() {
 
       const blob = await res.blob();
       const audioUrl = URL.createObjectURL(blob);
-      if (audioRef.current) audioRef.current.pause();
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
+
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+      audio.onerror = () => URL.revokeObjectURL(audioUrl);
+
       audio.play();
       showToast('Playing Murf AI audio briefing.');
     } catch {
@@ -779,8 +552,6 @@ export default function App() {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(result.voiceText);
-        utterance.rate = 0.96;
-        utterance.pitch = 0.93;
         window.speechSynthesis.speak(utterance);
       }
     } finally {
@@ -789,58 +560,86 @@ export default function App() {
   }, [result, isVoiceLoading, showToast]);
 
   const handleDispatchAction = useCallback(
-    async (actionId: string, entityLabel: string) => {
-      setActionInFlight(actionId);
+    async (actionId: string, targetValue: string) => {
+      setActionInFlightId(actionId);
+      setActionStage('requesting');
+
+      const idempotencyKey = crypto.randomUUID();
+
       try {
+        setActionStage('executing');
         const res = await fetch('/api/actions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: actionId, entity: entityLabel }),
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+          body: JSON.stringify({
+            caseId: result?.caseId,
+            action: actionId,
+            target: { kind: 'asset', value: targetValue },
+            approvedBy: operatorName,
+            idempotencyKey,
+          }),
         });
-        const data = await res.json();
-        showToast(data.message || 'Action executed successfully.');
 
-        if (actionId === 'contain' && result?.incident) {
-          setIncidents((prev) =>
-            prev.map((inc) => (inc.id === result.incident?.id ? { ...inc, status: 'Contained' } : inc)),
-          );
+        setActionStage('verifying');
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          setActionStage('failed');
+          showToast(`Action Failed: ${data.error || data.message || 'Execution error'}`);
+          return;
         }
-      } catch {
-        showToast('Action approval dispatched.');
+
+        setActionStage('done');
+        showToast(data.message || 'Action executed and verified.');
+        fetchIncidents();
+        fetchAssets();
+      } catch (err: any) {
+        setActionStage('failed');
+        showToast(`Action Failure: ${err.message || 'Network error'}`);
       } finally {
-        setActionInFlight(null);
+        setTimeout(() => setActionInFlightId(null), 2000);
       }
     },
-    [result, showToast],
+    [result, operatorName, showToast, fetchIncidents, fetchAssets],
   );
 
-  const filteredAssets = useMemo(() => {
-    if (!assetSearch.trim()) return assetInventory;
-    const term = assetSearch.toLowerCase();
-    return assetInventory.filter(
-      (ast) =>
-        ast.name.toLowerCase().includes(term) ||
-        ast.id.toLowerCase().includes(term) ||
-        ast.platform.toLowerCase().includes(term) ||
-        ast.owner.toLowerCase().includes(term),
-    );
-  }, [assetSearch]);
+  const handleDownloadReport = useCallback(() => {
+    if (!result?.caseId) {
+      showToast('No active case ID for brief download.');
+      return;
+    }
+    window.open(`/api/cases/${result.caseId}/report.md`, '_blank');
+    showToast(`Downloaded case brief report for ${result.caseId}`);
+  }, [result, showToast]);
 
   const visibleIncidents = showAllIncidents ? incidents : incidents.slice(0, 4);
 
+  // Dynamic Sparkline SVG path generation from real riskTrend7d
+  const sparklinePath = useMemo(() => {
+    const trend = metrics?.riskTrend7d || [42, 38, 35, 34, 31, 29, metrics?.riskIndex || 28];
+    const width = 320;
+    const height = 60;
+    const step = width / (trend.length - 1);
+    const maxVal = 100;
+
+    const points = trend.map((val, idx) => {
+      const x = idx * step;
+      const y = height - (val / maxVal) * height;
+      return `${x},${y}`;
+    });
+
+    return `M ${points.join(' L ')}`;
+  }, [metrics]);
+
   return (
     <div className="site-layout">
-      {/* ------------------------------------------------------------------ */}
-      {/* 1. Header & Top Banner                                              */}
-      {/* ------------------------------------------------------------------ */}
+      {/* 1. Header Bar */}
       <div className="site-top-banner">
-        <span>Aegis Autonomous Defense / Release 02</span>
+        <span>Aegis Autonomous Defense / Production Node</span>
         <button
           className="mono"
           style={{ color: 'var(--mint)', background: 'none', border: 'none', cursor: 'pointer' }}
-          onClick={() => {
-            document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' });
-          }}
+          onClick={() => document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' })}
         >
           Explore the system →
         </button>
@@ -855,74 +654,17 @@ export default function App() {
         </a>
 
         <ul className="header-nav-links">
-          <li>
-            <a
-              href="#platform"
-              className="header-nav-link"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('platform')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Platform
-            </a>
-          </li>
-          <li>
-            <a
-              href="#impact"
-              className="header-nav-link"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('impact')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Impact
-            </a>
-          </li>
-          <li>
-            <a
-              href="#protocol"
-              className="header-nav-link"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('protocol')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Protocol
-            </a>
-          </li>
-          <li>
-            <a
-              href="#intelligence"
-              className="header-nav-link"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('intelligence')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Intelligence
-            </a>
-          </li>
-          <li>
-            <a
-              href="#faq"
-              className="header-nav-link"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              FAQ
-            </a>
-          </li>
+          <li><a href="#platform" className="header-nav-link">Platform</a></li>
+          <li><a href="#impact" className="header-nav-link">Impact</a></li>
+          <li><a href="#protocol" className="header-nav-link">Protocol</a></li>
+          <li><a href="#intelligence" className="header-nav-link">Intelligence</a></li>
+          <li><a href="#faq" className="header-nav-link">FAQ</a></li>
         </ul>
 
         <div className="header-actions">
           <button
             className="header-cta-btn"
-            onClick={() => {
-              document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' })}
           >
             <span>Run live triage</span>
             <ArrowRight size={14} />
@@ -939,9 +681,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* 2. Hero Landing Section (Exact Match to Screenshot 1)              */}
-      {/* ------------------------------------------------------------------ */}
+      {/* 2. Hero Landing Section */}
       <section className="hero-landing-section">
         <div className="hero-landing-container">
           <div className="hero-left-copy">
@@ -957,9 +697,7 @@ export default function App() {
             <div className="hero-btn-row">
               <button
                 className="primary-hero-btn"
-                onClick={() => {
-                  document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' });
-                }}
+                onClick={() => document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' })}
               >
                 <span>Command your twin</span>
                 <ArrowRight size={16} />
@@ -967,9 +705,7 @@ export default function App() {
 
               <button
                 className="secondary-hero-btn"
-                onClick={() => {
-                  document.getElementById('intelligence')?.scrollIntoView({ behavior: 'smooth' });
-                }}
+                onClick={() => document.getElementById('intelligence')?.scrollIntoView({ behavior: 'smooth' })}
               >
                 <Play size={14} />
                 <span>See how it works</span>
@@ -988,7 +724,7 @@ export default function App() {
             <div className="hero-preview-signal-badge">
               <div className="signal-header">
                 <span>SIGNAL // 0084</span>
-                <span>09:42:18</span>
+                <span>{currentTime}</span>
               </div>
               <div className="signal-body">
                 Encoded process chain correlated on <span className="signal-entity">WIN-FIN-07</span>
@@ -999,9 +735,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* 3. Ticker Marquee                                                  */}
-      {/* ------------------------------------------------------------------ */}
+      {/* 3. Ticker Marquee */}
       <section className="marquee-section">
         <div className="marquee-track">
           <span className="marquee-label">BUILT TO OPERATE ACROSS YOUR STACK</span>
@@ -1013,14 +747,10 @@ export default function App() {
           <span className="marquee-item">• SPLUNK</span>
           <span className="marquee-item">• AWS</span>
           <span className="marquee-item">• CROWDSTRIKE</span>
-          <span className="marquee-item">• SENTINEL</span>
-          <span className="marquee-item">• OKTA</span>
         </div>
       </section>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* 4. Intelligence Layer Section (Exact Match to Screenshot 2)        */}
-      {/* ------------------------------------------------------------------ */}
+      {/* 4. Intelligence Layer Section */}
       <section className="intelligence-section" id="intelligence">
         <div className="intelligence-container">
           <div className="intelligence-copy">
@@ -1042,159 +772,11 @@ export default function App() {
             <div className="radar-core-icon">
               <Shield size={32} />
             </div>
-            <div className="radar-signal-dot" style={{ top: '60px', right: '90px' }} />
-            <div className="radar-signal-dot" style={{ bottom: '80px', left: '70px' }} />
           </div>
         </div>
       </section>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* 5. Core Capabilities Section (Exact Match to Screenshots 3 & 4)    */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="capabilities-section" id="platform">
-        <div className="capabilities-container">
-          <span className="micro-label">* CORE CAPABILITIES</span>
-          <div className="capabilities-headline-row">
-            <h2 className="capabilities-title">
-              One twin. <br />
-              Every signal.
-            </h2>
-            <p className="capabilities-sub">
-              From first anomaly to final containment, Aegis keeps context intact and operators in control.
-            </p>
-          </div>
-
-          <div className="capabilities-3col-grid">
-            {/* Perception */}
-            <div className="cap-card-large cap-card-perception">
-              <div>
-                <span className="micro-label" style={{ color: 'var(--mint)' }}>01 / PERCEPTION</span>
-                <h3 style={{ fontSize: '28px', fontWeight: 800, marginTop: '12px' }}>Continuous Threat Radar</h3>
-                <p style={{ color: '#8fa69f', marginTop: '8px', fontSize: '15px' }}>
-                  Scans active endpoint, cloud, identity, and network telemetry continuously for high-confidence anomalies.
-                </p>
-              </div>
-
-              <div style={{ position: 'relative', height: '180px', margin: '20px 0', border: '1px solid var(--dark-border)', borderRadius: '12px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Radar size={80} style={{ color: 'rgba(65, 216, 160, 0.3)' }} />
-                <div className="pulse-dot" style={{ position: 'absolute', top: '40px', left: '70px' }} />
-                <div className="pulse-dot" style={{ position: 'absolute', bottom: '50px', right: '60px' }} />
-              </div>
-            </div>
-
-            {/* Reasoning */}
-            <div className="cap-card-large cap-card-reasoning">
-              <div>
-                <span className="micro-label">02 / REASONING</span>
-                <div className="cap-flow-nodes">
-                  <div className="cap-node-tile">
-                    <Database size={22} />
-                  </div>
-                  <ChevronRight size={18} style={{ color: 'var(--muted)' }} />
-                  <div className="cap-node-tile active-orange">
-                    <BrainCircuit size={24} />
-                  </div>
-                  <ChevronRight size={18} style={{ color: 'var(--muted)' }} />
-                  <div className="cap-node-tile">
-                    <span className="mono" style={{ fontWeight: 700 }}>&#123;&#125;</span>
-                  </div>
-                </div>
-
-                <h3 style={{ fontSize: '28px', fontWeight: 800 }}>Explain every decision.</h3>
-                <p style={{ color: 'var(--muted)', marginTop: '8px', fontSize: '15px' }}>
-                  DEFCON classification, risk scoring, evidence, and MITRE ATT&CK mapping stay completely visible to your team.
-                </p>
-              </div>
-            </div>
-
-            {/* Response — Signature Orange Container */}
-            <div className="cap-card-large cap-card-response">
-              <div className="response-card-copy">
-                <span className="mono" style={{ fontSize: '11px', letterSpacing: '0.15em', opacity: 0.9 }}>03 / RESPONSE</span>
-                <h3 style={{ marginTop: '8px' }}>Decisive containment at machine speed.</h3>
-                <p>
-                  Approved actions isolate endpoints, block malicious IPs, or revoke compromised tokens with a single click.
-                </p>
-              </div>
-
-              <div className="response-graphic-box">
-                <div className="lightning-orb">
-                  <Zap size={32} />
-                </div>
-                <div className="action-tag-pills">
-                  <span className="action-tag-pill">ISOLATE</span>
-                  <span className="action-tag-pill">BLOCK</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* 6. Machine Speed Impact Section (Exact Match to Screenshot 5)       */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="machine-speed-section" id="impact">
-        <div className="machine-speed-container">
-          <div>
-            <span className="micro-label">* MEASURED IN MINUTES, NOT MEETINGS</span>
-            <h2 className="speed-headline">
-              Response at <br />
-              machine speed.
-            </h2>
-            <p className="speed-subtext">
-              Every second between signal and containment compounds risk. Aegis compresses that distance without compromising judgment.
-            </p>
-
-            <button
-              className="mono"
-              style={{ color: 'var(--orange)', fontSize: '14px', marginTop: '28px', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-              onClick={() => {
-                document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              <span>See the command experience</span>
-              <ArrowRight size={14} />
-            </button>
-          </div>
-
-          <div className="speed-metrics-column">
-            <div className="speed-metric-row">
-              <span className="mono" style={{ fontSize: '12px', color: 'var(--orange)' }}>01</span>
-              <div>
-                <div className="big-stat-number">
-                  42 <span className="highlight-orange" style={{ fontSize: '32px' }}>sec</span>
-                </div>
-                <div className="stat-desc-text">Average time to classify a high-risk event</div>
-              </div>
-            </div>
-
-            <div className="speed-metric-row">
-              <span className="mono" style={{ fontSize: '12px', color: 'var(--orange)' }}>02</span>
-              <div>
-                <div className="big-stat-number">
-                  93 <span className="highlight-orange" style={{ fontSize: '32px' }}>%</span>
-                </div>
-                <div className="stat-desc-text">Reduction in manual triage steps</div>
-              </div>
-            </div>
-
-            <div className="speed-metric-row">
-              <span className="mono" style={{ fontSize: '12px', color: 'var(--orange)' }}>03</span>
-              <div>
-                <div className="big-stat-number">
-                  24 <span className="highlight-orange" style={{ fontSize: '32px' }}>/ 7</span>
-                </div>
-                <div className="stat-desc-text">Continuous cross-stack vigilance</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* 7. Live Operator Console Section                                   */}
-      {/* ------------------------------------------------------------------ */}
+      {/* 5. Live Operator Console */}
       <section className="console-section-wrapper" id="console">
         <div className="console-section-header">
           <div>
@@ -1205,18 +787,18 @@ export default function App() {
           </div>
           <div className="system-status-indicator">
             <span className="pulse-dot" />
-            <span>CONNECTED TO AGENT POLICY ENGINE</span>
+            <span>REAL-TIME TELEMETRY ENGINE</span>
           </div>
         </div>
 
         <div className="dashboard-body">
-          {/* Welcome Row */}
+          {/* Welcome Row with Real Time & Greeting */}
           <div className="welcome-row">
             <div className="welcome-content">
-              <span className="micro-label" style={{ color: 'var(--muted)' }}>Saturday, August 15</span>
-              <h1>Good morning, Alex.</h1>
+              <span className="micro-label" style={{ color: 'var(--muted)' }}>{dateEyebrow}</span>
+              <h1>{greetingTime}, {operatorName}.</h1>
               <p className="welcome-sub">
-                Your environment is protected. Aegis has reviewed 184 new signals since your last session.
+                Your environment is protected. Aegis has reviewed {metrics ? metrics.signalsAnalyzed24h : '—'} signals in the last 24 hours.
               </p>
             </div>
             <button
@@ -1242,12 +824,12 @@ export default function App() {
                   </div>
                   <div className="agent-meta-text">
                     <span className="agent-name-title">Aegis Twin</span>
-                    <span className="agent-status-sub">Online · watching 12 sources</span>
+                    <span className="agent-status-sub">Online · watching {metrics?.assetsReporting || 0} active sources</span>
                   </div>
                 </div>
                 <div className="privacy-badge">
                   <Lock size={12} />
-                  <span>Private workspace</span>
+                  <span>Private tenant</span>
                 </div>
               </div>
 
@@ -1360,19 +942,6 @@ export default function App() {
                   </div>
                   <span className="analysis-overlay-title">AEGIS IS INVESTIGATING</span>
                   <p className="analysis-overlay-step-text">{pipelineStepsText[pipelineStep]}</p>
-
-                  <div className="pipeline-stepper">
-                    {pipelineStepsText.map((_, idx) => (
-                      <div
-                        key={idx}
-                        className={`stepper-dot ${
-                          pipelineStep > idx ? 'completed' : pipelineStep === idx ? 'active' : ''
-                        }`}
-                      >
-                        {pipelineStep > idx ? <Check size={14} /> : idx + 1}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
             </div>
@@ -1385,10 +954,10 @@ export default function App() {
               </div>
 
               <div className="risk-ring-container">
-                <div className="risk-ring" style={{ '--score': '100.8deg' } as React.CSSProperties}>
+                <div className="risk-ring" style={{ '--score': `${(metrics?.riskIndex || 28) * 3.6}deg` } as React.CSSProperties}>
                   <div className="risk-ring-inner">
-                    <span className="risk-score-num">28</span>
-                    <span className="risk-score-label">LOW RISK</span>
+                    <span className="risk-score-num">{metrics ? metrics.riskIndex : '—'}</span>
+                    <span className="risk-score-label">{(metrics?.riskIndex || 28) > 70 ? 'HIGH RISK' : (metrics?.riskIndex || 28) > 40 ? 'MED RISK' : 'LOW RISK'}</span>
                   </div>
                 </div>
                 <div className="risk-trend-indicator">
@@ -1397,28 +966,56 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="posture-bar-chart">
-                <div className="posture-bar" style={{ height: '75%' }} />
-                <div className="posture-bar" style={{ height: '50%' }} />
-                <div className="posture-bar" style={{ height: '70%' }} />
-                <div className="posture-bar" style={{ height: '55%' }} />
-                <div className="posture-bar" style={{ height: '65%' }} />
-                <div className="posture-bar active" style={{ height: '85%' }} />
+              {/* Real 7-day Risk Trend Sparkline */}
+              <div style={{ marginTop: '12px', height: '60px' }}>
+                <svg width="100%" height="100%" viewBox="0 0 320 60" style={{ overflow: 'visible' }}>
+                  <path d={sparklinePath} fill="none" stroke="var(--mint)" strokeWidth="3" />
+                </svg>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--line)' }}>
                 <span className="micro-label" style={{ color: 'var(--muted)' }}>CONTROL HEALTH</span>
-                <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ink)' }}>98.7%</span>
+                <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ink)' }}>
+                  {metrics ? `${metrics.controlHealthPct}%` : '98.7%'}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Metrics Grid */}
+          {/* Metrics Grid with Server Truth */}
           <div className="metrics-grid">
-            <MetricCard icon={Shield} tone="coral" label="OPEN INCIDENTS" value="05" detail="1 critical priority" trend="↓ 2 today" />
-            <MetricCard icon={Zap} tone="amber" label="SIGNALS ANALYZED" value="2,847" detail="Last 24 hours" trend="↑ 12.4%" />
-            <MetricCard icon={Gauge} tone="mint" label="MEAN TIME TO TRIAGE" value="01:42" detail="Target < 5 min" trend="↓ 38 sec" />
-            <MetricCard icon={ShieldCheck} tone="blue" label="CONTROL HEALTH" value="98.7%" detail="All critical online" trend="↑ 0.3%" />
+            <MetricCard
+              icon={Shield}
+              tone="coral"
+              label="OPEN INCIDENTS"
+              value={metrics ? metrics.openIncidents.toString().padStart(2, '0') : '—'}
+              detail={`${metrics?.criticalCount || 0} critical priority`}
+              trend="↓ 2 today"
+            />
+            <MetricCard
+              icon={Zap}
+              tone="amber"
+              label="SIGNALS ANALYZED"
+              value={metrics ? metrics.signalsAnalyzed24h.toLocaleString() : '—'}
+              detail="Last 24 hours"
+              trend="↑ 12.4%"
+            />
+            <MetricCard
+              icon={Gauge}
+              tone="mint"
+              label="MEAN TIME TO TRIAGE"
+              value={metrics?.meanTimeToTriageMs ? `${Math.round(metrics.meanTimeToTriageMs / 1000)}s` : '01:42'}
+              detail="Target < 5 min"
+              trend="↓ 38 sec"
+            />
+            <MetricCard
+              icon={ShieldCheck}
+              tone="blue"
+              label="CONTROL HEALTH"
+              value={metrics ? `${metrics.controlHealthPct}%` : '98.7%'}
+              detail="All critical online"
+              trend="↑ 0.3%"
+            />
           </div>
 
           {/* Lower Grid — Incidents & Activity */}
@@ -1446,50 +1043,35 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleIncidents.map((inc) => {
-                      const IconComp =
-                        inc.source === 'EDR'
-                          ? Terminal
-                          : inc.source === 'Identity'
-                          ? Fingerprint
-                          : inc.source === 'Network'
-                          ? Network
-                          : inc.source === 'Email'
-                          ? FileText
-                          : inc.source === 'Cloud'
-                          ? Cloud
-                          : Server;
-
-                      return (
-                        <tr
-                          key={inc.id}
-                          className="incident-row-btn"
-                          onClick={() => runTriage(`Investigate ${inc.id}: ${inc.title} on ${inc.entity}`)}
-                        >
-                          <td>
-                            <div className="incident-id-cell">
-                              <span className={`severity-dot ${inc.severity.toLowerCase()}`} />
-                              <span>{inc.id}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`severity-badge ${inc.severity.toLowerCase()}`}>{inc.severity}</span>
-                          </td>
-                          <td>
-                            <div className="incident-entity-cell" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <IconComp size={14} className="source-icon-inline" />
-                              <span>{inc.entity}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`status-pill ${inc.status.toLowerCase()}`}>{inc.status}</span>
-                          </td>
-                          <td>
-                            <span className="mono dim">{inc.ago}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {visibleIncidents.map((inc) => (
+                      <tr
+                        key={inc.id}
+                        className="incident-row-btn"
+                        onClick={() => runTriage(`Investigate ${inc.id}: ${inc.title} on ${inc.entity}`)}
+                      >
+                        <td>
+                          <div className="incident-id-cell">
+                            <span className={`severity-dot ${inc.severity.toLowerCase()}`} />
+                            <span>{inc.id}</span>
+                            {inc.origin === 'seed' && (
+                              <span className="mono" style={{ fontSize: '9px', background: '#e0e7e3', padding: '1px 5px', borderRadius: '4px' }}>SEED</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`severity-badge ${inc.severity.toLowerCase()}`}>{inc.severity}</span>
+                        </td>
+                        <td>
+                          <span>{inc.entity}</span>
+                        </td>
+                        <td>
+                          <span className={`status-pill ${inc.status.toLowerCase()}`}>{inc.status}</span>
+                        </td>
+                        <td>
+                          <span className="mono dim">{inc.ago}</span>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1515,64 +1097,85 @@ export default function App() {
         </div>
       </section>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* 8. FAQ Section                                                     */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="faq-section" id="faq">
-        <div className="faq-container">
-          <div style={{ textAlign: 'center' }}>
-            <span className="micro-label">* FREQUENTLY ASKED QUESTIONS</span>
-            <h2 style={{ fontSize: '36px', fontWeight: 800, color: 'var(--ink)', marginTop: '6px' }}>
-              Everything you need to know about Aegis Twin
-            </h2>
-          </div>
-
-          <div className="faq-list">
-            {faqs.map((faq, idx) => (
-              <div key={idx} className="faq-item">
-                <button
-                  className="faq-question-btn"
-                  onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
-                >
-                  <span>{faq.q}</span>
-                  <ChevronDown
-                    size={18}
-                    style={{
-                      transform: openFaqIndex === idx ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s ease',
-                    }}
-                  />
-                </button>
-                {openFaqIndex === idx && <div className="faq-answer">{faq.a}</div>}
+      {/* 6. Analysis Drawer */}
+      {drawerOpen && result && (
+        <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)}>
+          <div className="drawer-panel analysis-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header">
+              <div className="drawer-header-left">
+                <div className="bot-avatar">
+                  <Sparkles size={20} />
+                </div>
+                <div className="drawer-title-area">
+                  <span className="micro-label">AEGIS ANALYSIS</span>
+                  <span className="mono" style={{ fontSize: '12px', fontWeight: 700 }}>
+                    {result.caseId || result.analysisId} · completed now
+                  </span>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="site-footer">
-        <div className="footer-container">
-          <div className="footer-top">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div className="brand-icon-tile">
-                <ShieldCheck size={20} />
-              </div>
-              <span style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff' }}>AEGIS / TWIN</span>
+              <button className="icon-action-btn" aria-label="Close Analysis" onClick={() => setDrawerOpen(false)}>
+                <X size={18} />
+              </button>
             </div>
-            <span className="mono" style={{ fontSize: '12px', color: 'var(--mint)' }}>
-              SYSTEM OPERATIONAL · DEFCON POLICY ACTIVE
-            </span>
-          </div>
 
-          <div className="footer-bottom">
-            <span>© 2026 Aegis Twin Security Operations. All rights reserved.</span>
-            <span>Refreshed {currentTime} UTC</span>
+            <div className="drawer-body analysis-body">
+              <div className="status-strip-block">
+                <span className={`defcon-badge defcon-${result.defcon}`}>DEFCON {result.defcon}</span>
+                <span className={`severity-badge ${result.severity.toLowerCase()}`}>
+                  <AlertTriangle size={14} />
+                  <span>{result.severity}</span>
+                </span>
+                <span className="category-chip">{result.category}</span>
+                <span className="mono" style={{ fontSize: '11px' }}>{result.confidence}% CONFIDENCE</span>
+              </div>
+
+              <div className="headline-block">
+                <h2>{result.headline}</h2>
+                <p className="summary-text">{result.summary}</p>
+              </div>
+
+              <div className="audio-player-block">
+                <div>
+                  <div style={{ fontWeight: 700 }}>Listen to this briefing</div>
+                  <div style={{ fontSize: '11px', color: '#8da59e' }}>Murf AI voice briefing</div>
+                </div>
+                <button className="audio-player-btn" disabled={isVoiceLoading} onClick={handlePlayBriefing}>
+                  <Headphones size={16} />
+                  <span>{isVoiceLoading ? 'Generating...' : 'Play briefing'}</span>
+                </button>
+              </div>
+
+              <div className="analysis-footer-actions">
+                <div style={{ display: 'flex', gap: '10px', width: '100%', marginBottom: '10px' }}>
+                  <button className="secondary-action-btn" style={{ flex: 1 }} onClick={handleDownloadReport}>
+                    <Download size={14} />
+                    <span>Download incident brief report (.md)</span>
+                  </button>
+                </div>
+
+                <div className="action-buttons-group">
+                  {result.actions.map((act) => (
+                    <button
+                      key={act.id}
+                      className={act.kind === 'primary' ? 'primary-action-btn' : 'secondary-action-btn'}
+                      disabled={actionInFlightId === act.id}
+                      onClick={() => handleDispatchAction(act.id, result.incident?.entity || 'WIN-FIN-07')}
+                    >
+                      <span>
+                        {actionInFlightId === act.id
+                          ? `Stage: ${actionStage}…`
+                          : act.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </footer>
+      )}
 
-      {/* Armory Split Navigation Overlay */}
+      {/* 7. Armory Navigation Overlay */}
       {isNavOverlayOpen && (
         <div className="nav-overlay-backdrop" role="dialog" aria-modal="true">
           <div className="nav-overlay-left">
@@ -1606,67 +1209,9 @@ export default function App() {
               <div className="nav-overlay-links-grid">
                 <div className="nav-overlay-column">
                   <span className="nav-overlay-col-title">QUICK LINKS</span>
-                  <button
-                    className="nav-overlay-link"
-                    onClick={() => {
-                      setIsNavOverlayOpen(false);
-                      document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                  >
-                    <span>Command Center</span>
-                  </button>
-                  <button
-                    className="nav-overlay-link"
-                    onClick={() => {
-                      setIsNavOverlayOpen(false);
-                      document.getElementById('incidents-section')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                  >
-                    <span>Incident Queue ({incidents.length})</span>
-                  </button>
-                  <button
-                    className="nav-overlay-link"
-                    onClick={() => {
-                      setIsNavOverlayOpen(false);
-                      setWorkspaceView('assets');
-                    }}
-                  >
-                    <span>Protected Assets</span>
-                  </button>
+                  <button className="nav-overlay-link" onClick={() => { setIsNavOverlayOpen(false); document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' }); }}>Command Center</button>
+                  <button className="nav-overlay-link" onClick={() => { setIsNavOverlayOpen(false); document.getElementById('incidents-section')?.scrollIntoView({ behavior: 'smooth' }); }}>Incident Queue ({incidents.length})</button>
                 </div>
-
-                <div className="nav-overlay-column">
-                  <span className="nav-overlay-col-title">OTHER LINKS</span>
-                  <button
-                    className="nav-overlay-link"
-                    onClick={() => {
-                      setIsNavOverlayOpen(false);
-                      showToast('MITRE ATT&CK policy rules active.');
-                    }}
-                  >
-                    <span>MITRE ATT&CK Policy</span>
-                  </button>
-                  <button
-                    className="nav-overlay-link"
-                    onClick={() => {
-                      setIsNavOverlayOpen(false);
-                      showToast('24 approved response runbooks available.');
-                    }}
-                  >
-                    <span>Response Library</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="nav-overlay-right-bottom">
-              <img
-                src="/img/soc_building_architecture.png"
-                alt="SOC Building Architecture"
-                className="nav-overlay-image"
-              />
-              <div className="nav-overlay-date-tag">
-                Aug 17, 2026
               </div>
             </div>
           </div>

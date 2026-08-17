@@ -52,6 +52,7 @@ export interface AgentResult {
   directives: Directive[];
   actions: Array<{ id: string; label: string; kind: 'primary' | 'secondary' }>;
   completedAt: string;
+  providerDegraded?: boolean;
 }
 
 export interface IntegrationStatus {

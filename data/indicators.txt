@@ -1,0 +1,6 @@
+# Aegis Threat Intelligence Indicators (one per line)
+185.220.101.34
+malware.download.net
+fileshare-cloud.net
+bad-actor-c2.org
+194.26.29.114

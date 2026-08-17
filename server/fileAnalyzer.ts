@@ -192,3 +192,6 @@ export function inspectEvidenceFile(fileName: string, content: string): FileInsp
     processedAt: new Date().toISOString(),
   };
 }
+
+export const parseEvidenceFile = inspectEvidenceFile;
+

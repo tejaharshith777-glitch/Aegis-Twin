@@ -11,7 +11,7 @@
     "build": "tsc -b && vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "test": "tsx --test server/*.test.ts",
-    "build:pages": "tsc -b && PAGES_BUILD=true vite build --outDir docs"
+    "build:pages": "tsc -b && vite build --outDir docs"
   },
   "dependencies": {
     "compression": "^1.8.1",

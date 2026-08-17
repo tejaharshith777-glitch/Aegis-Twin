@@ -161,6 +161,139 @@ const faqs = [
 ];
 
 /* ------------------------------------------------------------------ */
+/* localBrowserTriage — deterministic fallback when API is down        */
+/* ------------------------------------------------------------------ */
+
+function localBrowserTriage(query: string, incidents: Incident[]): AgentResult {
+  const q = query.toLowerCase();
+  const severity: Severity = q.includes('critical') || q.includes('ransomware') || q.includes('exfil')
+    ? 'Critical'
+    : q.includes('high') || q.includes('powershell') || q.includes('lateral')
+    ? 'High'
+    : q.includes('medium') || q.includes('phish')
+    ? 'Medium'
+    : 'Low';
+
+  const defcon: 1 | 2 | 3 = severity === 'Critical' ? 1 : severity === 'High' ? 2 : 3;
+
+  const matched = incidents.find(
+    (i) => query.includes(i.id) || query.toLowerCase().includes(i.entity.toLowerCase())
+  );
+
+  return {
+    analysisId: `LOCAL-${Date.now()}`,
+    query,
+    headline: matched ? `Triage: ${matched.title}` : 'Security signal detected — review recommended',
+    summary: matched
+      ? `Browser local analysis matched ${matched.id} on entity ${matched.entity}. Severity assessed as ${severity}. Aegis Local engine used; Gemini unavailable.`
+      : `No matching live incident found. Query assessed locally at ${severity} severity. Verify with Gemini when connectivity restores.`,
+    category: matched?.source || 'General',
+    severity,
+    defcon,
+    confidence: matched ? 72 : 55,
+    riskScore: defcon === 1 ? 85 : defcon === 2 ? 65 : 40,
+    source: 'Browser Local',
+    voiceText: `Local engine assessed this as ${severity.toLowerCase()} severity. Defcon ${defcon}.`,
+    incident: matched,
+    evidence: [
+      { label: 'Engine', value: 'Browser Local', note: 'Gemini API unavailable; deterministic fallback active', tone: 'warning' },
+      { label: 'Severity', value: severity, note: 'Keyword-based heuristic assessment', tone: severity === 'Critical' ? 'danger' : severity === 'High' ? 'warning' : 'neutral' },
+    ],
+    reasoning: [
+      'Gemini policy engine is currently unreachable.',
+      'Browser local engine applied keyword heuristics to assess severity.',
+      'Human review is strongly recommended before any remediation.',
+    ],
+    mitreTechniques: severity === 'Critical'
+      ? [{ id: 'T1486', name: 'Data Encrypted for Impact', tactic: 'Impact' }]
+      : [{ id: 'T1059', name: 'Command and Scripting Interpreter', tactic: 'Execution' }],
+    directives: [
+      { priority: 1, action: 'Verify alert authenticity', detail: 'Confirm the signal with your SIEM before acting.' },
+      { priority: 2, action: 'Escalate to Tier 2 analyst', detail: 'Gemini is offline; human triage required.' },
+    ],
+    actions: [
+      { id: 'manual-review', label: 'Mark for manual review', kind: 'primary' },
+    ],
+    completedAt: new Date().toISOString(),
+    providerDegraded: true,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* MetricCard — dashboard KPI card                                    */
+/* ------------------------------------------------------------------ */
+
+interface MetricCardProps {
+  icon: React.ComponentType<any>;
+  tone: 'coral' | 'amber' | 'mint' | 'blue';
+  label: string;
+  value: string;
+  detail: string;
+  trend: string;
+}
+
+function MetricCard({ icon: Icon, tone, label, value, detail, trend }: MetricCardProps) {
+  const toneMap: Record<string, string> = {
+    coral: 'var(--coral)',
+    amber: 'var(--amber)',
+    mint: 'var(--mint)',
+    blue: '#5ba3f5',
+  };
+  const color = toneMap[tone] || 'var(--mint)';
+  return (
+    <div className="metric-card" style={{ borderTop: `3px solid ${color}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+        <span style={{ color, display: 'flex' }}><Icon size={16} strokeWidth={2.5} /></span>
+        <span className="micro-label" style={{ color: 'var(--muted)' }}>{label}</span>
+      </div>
+      <div style={{ fontSize: '28px', fontWeight: 800, letterSpacing: '-1px', color: 'var(--ink)', lineHeight: 1 }}>
+        {value}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+        <span style={{ fontSize: '11px', color: 'var(--muted)' }}>{detail}</span>
+        <span style={{ fontSize: '11px', color, fontWeight: 600 }}>{trend}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* ActivityItem — agent activity feed row                             */
+/* ------------------------------------------------------------------ */
+
+interface ActivityItemProps {
+  dotTone: 'mint' | 'amber' | 'blue' | 'grey';
+  title: string;
+  desc: string;
+  time: string;
+}
+
+function ActivityItem({ dotTone, title, desc, time }: ActivityItemProps) {
+  const dotColors: Record<string, string> = {
+    mint: 'var(--mint)',
+    amber: 'var(--amber)',
+    blue: '#5ba3f5',
+    grey: 'var(--muted)',
+  };
+  return (
+    <div style={{ display: 'flex', gap: '12px', padding: '12px 0', borderBottom: '1px solid var(--line)' }}>
+      <span
+        style={{
+          width: '8px', height: '8px', borderRadius: '50%',
+          background: dotColors[dotTone] || 'var(--muted)',
+          flexShrink: 0, marginTop: '5px',
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--ink)' }}>{title}</div>
+        <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{desc}</div>
+      </div>
+      <span style={{ fontSize: '11px', color: 'var(--muted)', whiteSpace: 'nowrap', marginTop: '2px' }}>{time}</span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Main Aegis Component                                               */
 /* ------------------------------------------------------------------ */
 

@@ -9,3 +9,9 @@ docs/
 .DS_Store
 .tsbuild/
 *.tsbuildinfo
+data/events.jsonl
+data/snapshot.json
+data/.lock
+data/indicators.txt
+data/audio/
+ingest/*.json

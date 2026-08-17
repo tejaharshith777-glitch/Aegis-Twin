@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/server" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/server.ts": {
+      "memory": 512,
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "AEGIS_DATA_DIR": "/tmp/aegis-data",
+    "AEGIS_INGEST_DIR": "/tmp/aegis-ingest",
+    "AEGIS_OPEN_READ": "true",
+    "TRUST_PROXY": "1"
+  }
+}

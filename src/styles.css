@@ -2593,4 +2593,117 @@ input, textarea, select {
   .product-section-parent { padding: 60px 20px; }
 }
 
+/* ================================================================
+   MAGNETIC FOLLOWER CURSOR & DYNAMIC INTERACTION ENGINE
+   ================================================================ */
+.cursor-magnet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--txt-primary);
+  color: var(--bg-page);
+  pointer-events: none;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  transition: transform 0.15s ease-out, width 0.3s ease, height 0.3s ease, background-color 0.3s ease;
+  mix-blend-mode: difference;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+.cursor-magnet.active {
+  width: 72px;
+  height: 72px;
+  background: var(--mint);
+  color: #0b0f17;
+}
+
+/* Compact Proportions for Hero Grid Masks */
+.hero-image-grid-mask {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-card);
+  height: 180px;
+}
+
+/* Color Pickers Swatches */
+.color-picker-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.color-picker-swatch:hover,
+.color-picker-swatch.active {
+  transform: scale(1.2);
+  border-color: var(--txt-primary);
+}
+
+/* Theme Variant Modifiers for Engine Cards */
+.theme-mint { border-color: var(--mint) !important; box-shadow: 0 0 25px rgba(65, 216, 160, 0.15) !important; }
+.theme-obsidian { border-color: #111827 !important; }
+.theme-coral { border-color: var(--coral) !important; box-shadow: 0 0 25px rgba(255, 82, 66, 0.15) !important; }
+.theme-silver { border-color: var(--silver) !important; }
+
+/* Dashboard Tables (Incidents & Assets) */
+.noho-dashboard-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-card);
+  padding: 32px;
+  margin-top: 40px;
+  box-shadow: var(--shadow-card);
+}
+
+.noho-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+.noho-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--txt-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.noho-table td {
+  padding: 16px;
+  font-size: 0.9rem;
+  color: var(--txt-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.noho-table tr:hover td {
+  background: rgba(14, 18, 27, 0.02);
+}
+
+/* Quick Prompt Chips */
+.quick-prompt-chip {
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--btn-sc-bg);
+  border: 1px solid var(--border-card);
+  color: var(--txt-primary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.quick-prompt-chip:hover {
+  transform: translateY(-2px);
+  background: var(--btn-pm-bg);
+  color: var(--btn-pm-txt);
+}
+
+
 

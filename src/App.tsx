@@ -331,6 +331,23 @@ export default function App() {
   const [isEnergyMenuOpen, setIsEnergyMenuOpen] = useState<boolean>(false);
   const [activeProductModal, setActiveProductModal] = useState<'triage' | 'sentinel' | null>(null);
 
+  /* Magnetic Cursor Follower & Color Pickers States */
+  const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
+  const [cursorText, setCursorText] = useState('');
+  const [isCursorActive, setIsCursorActive] = useState(false);
+  const [triageTheme, setTriageTheme] = useState<'mint' | 'obsidian' | 'coral' | 'silver'>('mint');
+  const [sentinelTheme, setSentinelTheme] = useState<'mint' | 'obsidian' | 'coral' | 'silver'>('obsidian');
+  const [galleryIndex, setGalleryIndex] = useState<number>(0);
+  const [incidentFilter, setIncidentFilter] = useState<'All' | Severity>('All');
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setCursorPos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
@@ -780,6 +797,14 @@ export default function App() {
 
   return (
     <div className="site-layout">
+      {/* MAGNETIC FOLLOWER CURSOR */}
+      <div
+        className={`cursor-magnet ${isCursorActive ? 'active' : ''}`}
+        style={{ left: `${cursorPos.x}px`, top: `${cursorPos.y}px` }}
+      >
+        {cursorText ? <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>{cursorText}</span> : <ArrowRight size={14} />}
+      </div>
+
       {/* 1. NOHO EDITORIAL HEADER */}
       <header className="noho-header">
         <a href="#" className="header-logo-text">
@@ -791,6 +816,8 @@ export default function App() {
             <a href="#hero-section" className="header-nav-link">About</a>
             <a href="#quote-section" className="header-nav-link">Philosophy</a>
             <a href="#product-section" className="header-nav-link">Engines</a>
+            <a href="#incidents-section" className="header-nav-link">Incidents ({incidents.length})</a>
+            <a href="#assets-section" className="header-nav-link">Assets ({assets.length})</a>
             <a href="#advantages-section" className="header-nav-link">Advantages</a>
             <a href="#console-section" className="header-nav-link">Live Cockpit</a>
             <a href="#faq-section" className="header-nav-link">FAQ</a>
@@ -801,6 +828,8 @@ export default function App() {
             className="energy-menu-button"
             onClick={() => setIsEnergyMenuOpen(!isEnergyMenuOpen)}
             aria-expanded={isEnergyMenuOpen}
+            onMouseEnter={() => { setIsCursorActive(true); setCursorText('Theme'); }}
+            onMouseLeave={() => { setIsCursorActive(false); setCursorText(''); }}
           >
             <span>Energy Usage</span>
             <span className={`energy_tag ${theme === 'dark' ? 'energy-low' : 'energy-med'}`}>
@@ -813,6 +842,8 @@ export default function App() {
             className="btn_pm"
             style={{ padding: '10px 22px', fontSize: '0.82rem' }}
             onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
+            onMouseEnter={() => { setIsCursorActive(true); setCursorText('Run'); }}
+            onMouseLeave={() => { setIsCursorActive(false); setCursorText(''); }}
           >
             Run Live Triage
           </button>
@@ -889,12 +920,16 @@ export default function App() {
             <button
               className="btn_pm"
               onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
+              onMouseEnter={() => { setIsCursorActive(true); setCursorText('Command'); }}
+              onMouseLeave={() => { setIsCursorActive(false); setCursorText(''); }}
             >
               Command Your Twin <ArrowRight size={16} style={{ marginLeft: '8px' }} />
             </button>
             <button
               className="btn_sc"
               onClick={() => document.getElementById('product-section')?.scrollIntoView({ behavior: 'smooth' })}
+              onMouseEnter={() => { setIsCursorActive(true); setCursorText('Engines'); }}
+              onMouseLeave={() => { setIsCursorActive(false); setCursorText(''); }}
             >
               See Engines
             </button>
@@ -965,12 +1000,23 @@ export default function App() {
 
         <div className="product-grid">
           {/* Engine Card 1 */}
-          <div className="product-card-parent">
+          <div className={`product-card-parent theme-${triageTheme}`}>
             <div className="product-card-image-box">
               <img src="/assets/images/aegis_noho_product_1.png" alt="Aegis Voice Triage Engine" />
             </div>
             <div>
-              <span className="descriptor_sb">CORE SYSTEM 01</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="descriptor_sb">CORE SYSTEM 01</span>
+                {/* Pick a Color Swatches */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--txt-muted)' }}>Pick mode:</span>
+                  <div className={`color-picker-swatch ${triageTheme === 'mint' ? 'active' : ''}`} style={{ background: '#41d8a0' }} onClick={() => setTriageTheme('mint')} />
+                  <div className={`color-picker-swatch ${triageTheme === 'obsidian' ? 'active' : ''}`} style={{ background: '#111827' }} onClick={() => setTriageTheme('obsidian')} />
+                  <div className={`color-picker-swatch ${triageTheme === 'coral' ? 'active' : ''}`} style={{ background: '#ff5242' }} onClick={() => setTriageTheme('coral')} />
+                  <div className={`color-picker-swatch ${triageTheme === 'silver' ? 'active' : ''}`} style={{ background: '#b0b8c4' }} onClick={() => setTriageTheme('silver')} />
+                </div>
+              </div>
+
               <h3 className="h2_sb" style={{ fontSize: '1.6rem', marginTop: '4px' }}>Aegis Voice Triage Engine</h3>
               <p className="h3_rl" style={{ fontSize: '0.92rem', marginTop: '6px' }}>
                 Ingests natural voice commands and logs, correlates attack signals, and streams evidence-backed verdicts.
@@ -982,7 +1028,7 @@ export default function App() {
                 <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--txt-primary)' }}>$0 / Open Source</div>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn_sc" onClick={() => setActiveProductModal('triage')}>Learn more</button>
+                <button className="btn_sc" onClick={() => { setActiveProductModal('triage'); setGalleryIndex(0); }}>Learn more</button>
                 <button
                   className="btn_pm"
                   onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
@@ -994,12 +1040,23 @@ export default function App() {
           </div>
 
           {/* Engine Card 2 */}
-          <div className="product-card-parent">
+          <div className={`product-card-parent theme-${sentinelTheme}`}>
             <div className="product-card-image-box">
               <img src="/assets/images/aegis_noho_hero_1.png" alt="Sentinel Guard Policy Core" />
             </div>
             <div>
-              <span className="descriptor_sb">CORE SYSTEM 02</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="descriptor_sb">CORE SYSTEM 02</span>
+                {/* Pick a Color Swatches */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--txt-muted)' }}>Pick mode:</span>
+                  <div className={`color-picker-swatch ${sentinelTheme === 'mint' ? 'active' : ''}`} style={{ background: '#41d8a0' }} onClick={() => setSentinelTheme('mint')} />
+                  <div className={`color-picker-swatch ${sentinelTheme === 'obsidian' ? 'active' : ''}`} style={{ background: '#111827' }} onClick={() => setSentinelTheme('obsidian')} />
+                  <div className={`color-picker-swatch ${sentinelTheme === 'coral' ? 'active' : ''}`} style={{ background: '#ff5242' }} onClick={() => setSentinelTheme('coral')} />
+                  <div className={`color-picker-swatch ${sentinelTheme === 'silver' ? 'active' : ''}`} style={{ background: '#b0b8c4' }} onClick={() => setSentinelTheme('silver')} />
+                </div>
+              </div>
+
               <h3 className="h2_sb" style={{ fontSize: '1.6rem', marginTop: '4px' }}>Sentinel Guard Policy Core</h3>
               <p className="h3_rl" style={{ fontSize: '0.92rem', marginTop: '6px' }}>
                 Deterministic JSON policy evaluator enforcing DEFCON levels 1–3 and automated containment playbooks.
@@ -1011,7 +1068,7 @@ export default function App() {
                 <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--txt-primary)' }}>$0 / Enterprise</div>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn_sc" onClick={() => setActiveProductModal('sentinel')}>Learn more</button>
+                <button className="btn_sc" onClick={() => { setActiveProductModal('sentinel'); setGalleryIndex(0); }}>Learn more</button>
                 <button
                   className="btn_pm"
                   onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
@@ -1024,7 +1081,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* 6. MODAL DETAIL POPUPS */}
+      {/* 6. MODAL DETAIL POPUPS WITH GALLERY SLIDER */}
       {activeProductModal && (
         <div className="product-popup-overflow" onClick={() => setActiveProductModal(null)}>
           <div className="product-popup" onClick={(e) => e.stopPropagation()}>
@@ -1040,8 +1097,30 @@ export default function App() {
                   The Voice Triage Engine captures spoken analyst command streams via Deepgram WebSocket streaming, correlates events with live backend store, and returns structured MITRE ATT&CK technique classifications.
                 </p>
 
-                <div style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', height: '240px' }}>
-                  <img src="/assets/images/aegis_noho_product_1.png" alt="Detail View" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {/* Modal Gallery Slider */}
+                <div style={{ position: 'relative', margin: '24px 0', borderRadius: '16px', overflow: 'hidden', height: '260px' }}>
+                  <img
+                    src={galleryIndex === 0 ? "/assets/images/aegis_noho_product_1.png" : "/assets/images/aegis_noho_quote_1.png"}
+                    alt="Detail Gallery View"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.4s ease' }}
+                  />
+
+                  <div style={{ position: 'absolute', bottom: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn_sc"
+                      style={{ padding: '6px 16px', fontSize: '0.78rem', background: 'rgba(0,0,0,0.6)', color: '#fff' }}
+                      onClick={() => setGalleryIndex(0)}
+                    >
+                      Back
+                    </button>
+                    <button
+                      className="btn_pm"
+                      style={{ padding: '6px 16px', fontSize: '0.78rem' }}
+                      onClick={() => setGalleryIndex(1)}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '24px' }}>
@@ -1073,8 +1152,30 @@ export default function App() {
                   Enforces strict schema constraints over all LLM triage outputs. Guarantees zero hallucinations by validating JSON structures against strict TypeScript specifications before executing mitigation playbooks.
                 </p>
 
-                <div style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', height: '240px' }}>
-                  <img src="/assets/images/aegis_noho_hero_1.png" alt="Sentinel View" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {/* Modal Gallery Slider */}
+                <div style={{ position: 'relative', margin: '24px 0', borderRadius: '16px', overflow: 'hidden', height: '260px' }}>
+                  <img
+                    src={galleryIndex === 0 ? "/assets/images/aegis_noho_hero_1.png" : "/assets/images/aegis_noho_quote_2.png"}
+                    alt="Sentinel Gallery View"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.4s ease' }}
+                  />
+
+                  <div style={{ position: 'absolute', bottom: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn_sc"
+                      style={{ padding: '6px 16px', fontSize: '0.78rem', background: 'rgba(0,0,0,0.6)', color: '#fff' }}
+                      onClick={() => setGalleryIndex(0)}
+                    >
+                      Back
+                    </button>
+                    <button
+                      className="btn_pm"
+                      style={{ padding: '6px 16px', fontSize: '0.78rem' }}
+                      onClick={() => setGalleryIndex(1)}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '24px' }}>
@@ -1102,6 +1203,120 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 7. LIVE INCIDENTS DASHBOARD QUEUE */}
+      <section id="incidents-section" className="product-section-parent" style={{ paddingTop: '40px' }}>
+        <span className="descriptor_sb">* LIVE INCIDENT COMMAND QUEUE</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+          <h2 className="h2_sb">Active Security Incidents (<strong>{incidents.length}</strong>)</h2>
+          
+          {/* Incident Filter Tabs */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {(['All', 'Critical', 'High', 'Medium', 'Low'] as const).map((sev) => (
+              <button
+                key={sev}
+                className={`quick-prompt-chip ${incidentFilter === sev ? 'active' : ''}`}
+                onClick={() => setIncidentFilter(sev)}
+                style={{ background: incidentFilter === sev ? 'var(--btn-pm-bg)' : 'var(--btn-sc-bg)', color: incidentFilter === sev ? 'var(--btn-pm-txt)' : 'var(--txt-primary)' }}
+              >
+                {sev}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="noho-dashboard-card">
+          <table className="noho-table">
+            <thead>
+              <tr>
+                <th>Incident ID</th>
+                <th>Title / Detection</th>
+                <th>Severity</th>
+                <th>Entity</th>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incidents
+                .filter((inc) => incidentFilter === 'All' || inc.severity === incidentFilter)
+                .map((inc) => (
+                  <tr key={inc.id}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{inc.id}</td>
+                    <td style={{ fontWeight: 600 }}>{inc.title}</td>
+                    <td>
+                      <span className={`energy_tag ${inc.severity === 'Critical' ? 'energy-high' : inc.severity === 'High' ? 'energy-med' : 'energy-low'}`}>
+                        {inc.severity}
+                      </span>
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)' }}>{inc.entity}</td>
+                    <td>{inc.source}</td>
+                    <td><span className="status-pill contained">{inc.status}</span></td>
+                    <td>
+                      <button
+                        className="btn_pm"
+                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        onClick={() => runTriage(`Investigate ${inc.id} on host ${inc.entity}`)}
+                      >
+                        Triage Incident
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 8. LIVE ASSETS MATRIX DASHBOARD TABLE */}
+      <section id="assets-section" className="product-section-parent" style={{ paddingTop: '0px' }}>
+        <span className="descriptor_sb">* INFRASTRUCTURE ASSET MATRIX</span>
+        <h2 className="h2_sb" style={{ marginTop: '8px' }}>Monitored Endpoints & Cloud Nodes (<strong>{assets.length}</strong>)</h2>
+
+        <div className="noho-dashboard-card">
+          <table className="noho-table">
+            <thead>
+              <tr>
+                <th>Asset ID</th>
+                <th>Hostname / Node</th>
+                <th>Platform</th>
+                <th>Owner / Department</th>
+                <th>Status</th>
+                <th>Risk Score</th>
+                <th>Host Isolation Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {assets.map((ast) => (
+                <tr key={ast.id}>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{ast.id}</td>
+                  <td style={{ fontWeight: 600 }}>{ast.name}</td>
+                  <td>{ast.platform}</td>
+                  <td>{ast.owner}</td>
+                  <td>
+                    <span className={`energy_tag ${ast.status === 'isolated' ? 'energy-high' : 'energy-low'}`}>
+                      {ast.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td style={{ fontWeight: 700, color: ast.riskScore > 70 ? 'var(--coral)' : 'var(--txt-primary)' }}>
+                    {ast.riskScore} / 100
+                  </td>
+                  <td>
+                    <button
+                      className="btn_sc"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', background: ast.status === 'isolated' ? 'var(--mint)' : 'var(--btn-sc-bg)' }}
+                      onClick={() => handleDispatchAction('ACT-ISOLATE-01', ast.name)}
+                    >
+                      {ast.status === 'isolated' ? 'Restore Host' : 'Isolate Host'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* 7. ADVANTAGES SECTION (NOHO SLIDE CARDS) */}
       <section id="advantages-section" className="advantages-section-parent">

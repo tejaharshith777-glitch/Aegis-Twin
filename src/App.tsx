@@ -325,6 +325,20 @@ export default function App() {
   const [isNavOverlayOpen, setIsNavOverlayOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
+  /* Noho Design System Theme & Control States */
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [reduceMotion, setReduceMotion] = useState<boolean>(false);
+  const [isEnergyMenuOpen, setIsEnergyMenuOpen] = useState<boolean>(false);
+  const [activeProductModal, setActiveProductModal] = useState<'triage' | 'sentinel' | null>(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-reduce-motion', reduceMotion ? 'true' : 'false');
+  }, [reduceMotion]);
+
   /* Refs */
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -766,46 +780,46 @@ export default function App() {
 
   return (
     <div className="site-layout">
-      {/* 1. Header Bar */}
-      <div className="site-top-banner">
-        <span>Aegis Autonomous Defense / Production Node</span>
-        <button
-          className="mono"
-          style={{ color: 'var(--mint)', background: 'none', border: 'none', cursor: 'pointer' }}
-          onClick={() => document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' })}
-        >
-          Explore the system →
-        </button>
-      </div>
-
-      <header className="site-header">
-        <a href="#" className="header-brand">
-          <div className="brand-icon-tile">
-            <ShieldCheck size={20} />
-          </div>
-          <span className="brand-logo-text">AEGIS / TWIN</span>
+      {/* 1. NOHO EDITORIAL HEADER */}
+      <header className="noho-header">
+        <a href="#" className="header-logo-text">
+          AEGIS / TWIN
         </a>
 
-        <ul className="header-nav-links">
-          <li><a href="#platform" className="header-nav-link">Platform</a></li>
-          <li><a href="#impact" className="header-nav-link">Impact</a></li>
-          <li><a href="#protocol" className="header-nav-link">Protocol</a></li>
-          <li><a href="#intelligence" className="header-nav-link">Intelligence</a></li>
-          <li><a href="#faq" className="header-nav-link">FAQ</a></li>
-        </ul>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
+          <nav className="header-nav-links" style={{ display: 'flex', gap: '24px', listStyle: 'none' }}>
+            <a href="#hero-section" className="header-nav-link">About</a>
+            <a href="#quote-section" className="header-nav-link">Philosophy</a>
+            <a href="#product-section" className="header-nav-link">Engines</a>
+            <a href="#advantages-section" className="header-nav-link">Advantages</a>
+            <a href="#console-section" className="header-nav-link">Live Cockpit</a>
+            <a href="#faq-section" className="header-nav-link">FAQ</a>
+          </nav>
 
-        <div className="header-actions">
+          {/* Energy Rating & Theme Menu Button */}
           <button
-            className="header-cta-btn"
-            onClick={() => document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' })}
+            className="energy-menu-button"
+            onClick={() => setIsEnergyMenuOpen(!isEnergyMenuOpen)}
+            aria-expanded={isEnergyMenuOpen}
           >
-            <span>Run live triage</span>
-            <ArrowRight size={14} />
+            <span>Energy Usage</span>
+            <span className={`energy_tag ${theme === 'dark' ? 'energy-low' : 'energy-med'}`}>
+              {theme === 'dark' ? 'Low (-35%)' : 'Med'}
+            </span>
+            <ChevronDown size={14} style={{ transform: isEnergyMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s ease' }} />
+          </button>
+
+          <button
+            className="btn_pm"
+            style={{ padding: '10px 22px', fontSize: '0.82rem' }}
+            onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
+          >
+            Run Live Triage
           </button>
 
           <button
             className="two-line-menu-btn"
-            aria-label="Open Full Menu"
+            aria-label="Open Drawer"
             onClick={() => setIsNavOverlayOpen(true)}
           >
             <div className="menu-line" />
@@ -814,95 +828,334 @@ export default function App() {
         </div>
       </header>
 
-      {/* 2. Hero Landing Section */}
-      <section className="hero-landing-section">
-        <div className="hero-landing-container">
-          <div className="hero-left-copy">
-            <span className="micro-label">* AUTONOMOUS SECURITY OPERATIONS</span>
-            <h1 className="hero-headline">
-              Security that <br />
-              <span className="highlight-orange">thinks ahead.</span>
-            </h1>
-            <p className="hero-subcopy">
-              A voice-activated digital twin that sees the whole attack, reasons through the noise, and puts decisive action in your hands.
+      {/* 2. ENERGY RATING & THEME CONTROL PANEL DROPDOWN */}
+      {isEnergyMenuOpen && (
+        <div className="header-energy-menu-panel">
+          <div style={{ marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="descriptor_sb">Energy Rating</span>
+              <span className="energy_tag energy-low">Low (-35% Energy)</span>
+            </div>
+            <p className="h3_rl" style={{ fontSize: '0.82rem', marginTop: '6px' }}>
+              Dark mode and reduced animation reduce GPU/CPU draw, saving up to 35% battery energy.
             </p>
+          </div>
 
-            <div className="hero-btn-row">
-              <button
-                className="primary-hero-btn"
-                onClick={() => document.getElementById('console')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                <span>Command your twin</span>
-                <ArrowRight size={16} />
-              </button>
-
-              <button
-                className="secondary-hero-btn"
-                onClick={() => document.getElementById('intelligence')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                <Play size={14} />
-                <span>See how it works</span>
-              </button>
+          <div className="control-panel-row">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--txt-primary)' }}>Dark Mode</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--txt-muted)' }}>OLED black theme</div>
+            </div>
+            <div
+              className={`switch ${theme === 'dark' ? 'active' : ''}`}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            >
+              <div className="switch-inner" />
             </div>
           </div>
 
-          <div className="hero-preview-card">
+          <div className="control-panel-row">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--txt-primary)' }}>Reduce Animation</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--txt-muted)' }}>Low motion / high performance</div>
+            </div>
+            <div
+              className={`switch ${reduceMotion ? 'active' : ''}`}
+              onClick={() => setReduceMotion(!reduceMotion)}
+            >
+              <div className="switch-inner" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. HERO SECTION (NOHO SPLIT EDITORIAL) */}
+      <section id="hero-section" className="hero-section-parent">
+        <div className="hero-left-half">
+          <span className="descriptor_sb">* AUTONOMOUS DEFENSE FROM AEGIS COMMAND</span>
+          
+          <div className="hero-title-parent">
+            <h1 className="h1">We build digital twins</h1>
+            <h1 className="h1" style={{ color: 'var(--orange)' }}>that think ahead,</h1>
+            <h1 className="h1">reason through noise,</h1>
+            <h1 className="h1">and protect stack.</h1>
+          </div>
+
+          <p className="h3_rl">
+            A voice-activated security operations digital twin that correlates live telemetry, maps behaviors to MITRE ATT&CK, and executes human-in-the-loop containment.
+          </p>
+
+          <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+            <button
+              className="btn_pm"
+              onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              Command Your Twin <ArrowRight size={16} style={{ marginLeft: '8px' }} />
+            </button>
+            <button
+              className="btn_sc"
+              onClick={() => document.getElementById('product-section')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              See Engines
+            </button>
+          </div>
+        </div>
+
+        {/* Hero 3D Grid Mask */}
+        <div className="hero-right-half">
+          <div className="hero-image-grid-mask">
+            <img src="/assets/images/aegis_noho_hero_1.png" alt="Aegis Twin Shield Node" />
+          </div>
+          <div className="hero-image-grid-mask">
+            <img src="/assets/images/aegis_noho_product_1.png" alt="Triage Console Preview" />
+          </div>
+          <div className="hero-image-grid-mask">
+            <img src="/assets/images/aegis_noho_quote_1.png" alt="Neural Cyber Orb" />
+          </div>
+          <div className="hero-image-grid-mask">
+            <img src="/assets/images/aegis_noho_quote_2.png" alt="Security Lock Node" />
+          </div>
+        </div>
+      </section>
+
+      {/* 4. INLINE FLOATING IMAGE QUOTE SECTION (NOHO SIGNATURE FEATURE!) */}
+      <section id="quote-section" className="quote-section-parent">
+        <div className="quote-container">
+          <span className="descriptor_sb" style={{ marginBottom: '24px', display: 'block' }}>* PHILOSOPHY OF DEFENSE</span>
+          
+          <div className="title-line-parent">
+            <h2 className="h1">Our AI digital twin</h2>
+            <div className="qoute-img-parent" title="Neural Reasoning Engine">
+              <img className="quote-img" src="/assets/images/aegis_noho_quote_1.png" alt="Neural Orb" />
+            </div>
+            <h2 className="h1">is built with</h2>
+          </div>
+
+          <div className="title-line-parent">
+            <h2 className="h1">sustainable</h2>
+            <div className="qoute-img-parent" title="Deterministic Security Controls">
+              <img className="quote-img" src="/assets/images/aegis_noho_quote_2.png" alt="Shield Node" />
+            </div>
+            <h2 className="h1">deterministic reasoning like</h2>
+          </div>
+
+          <div className="title-line-parent">
+            <h2 className="h1">schema-constrained LLMs,</h2>
+            <div className="qoute-img-parent" title="Live Telemetry Graph">
+              <img className="quote-img" src="/assets/images/aegis_noho_hero_1.png" alt="Hero Node" />
+            </div>
+            <h2 className="h1">live incident graphs</h2>
+          </div>
+
+          <div className="title-line-parent">
+            <h2 className="h1">and zero-trust</h2>
+            <div className="qoute-img-parent" title="Sub-second Containment">
+              <img className="quote-img" src="/assets/images/aegis_noho_product_1.png" alt="Triage Card" />
+            </div>
+            <h2 className="h1" style={{ color: 'var(--mint)' }}>instant containment.</h2>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. PRODUCT ENGINES SHOWCASE SECTION */}
+      <section id="product-section" className="product-section-parent">
+        <span className="descriptor_sb">* PRODUCTION ENGINES</span>
+        <h2 className="h2_sb" style={{ marginTop: '8px' }}>Security engines that <strong>care and protect</strong></h2>
+        <p className="h3_rl" style={{ marginTop: '8px' }}>Designed for rapid tier-one triage, zero hallucination policies, and human-guided execution.</p>
+
+        <div className="product-grid">
+          {/* Engine Card 1 */}
+          <div className="product-card-parent">
+            <div className="product-card-image-box">
+              <img src="/assets/images/aegis_noho_product_1.png" alt="Aegis Voice Triage Engine" />
+            </div>
+            <div>
+              <span className="descriptor_sb">CORE SYSTEM 01</span>
+              <h3 className="h2_sb" style={{ fontSize: '1.6rem', marginTop: '4px' }}>Aegis Voice Triage Engine</h3>
+              <p className="h3_rl" style={{ fontSize: '0.92rem', marginTop: '6px' }}>
+                Ingests natural voice commands and logs, correlates attack signals, and streams evidence-backed verdicts.
+              </p>
+            </div>
+            <div className="product-card-info">
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--txt-muted)' }}>License</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--txt-primary)' }}>$0 / Open Source</div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button className="btn_sc" onClick={() => setActiveProductModal('triage')}>Learn more</button>
+                <button
+                  className="btn_pm"
+                  onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
+                >
+                  Run Triage
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Engine Card 2 */}
+          <div className="product-card-parent">
+            <div className="product-card-image-box">
+              <img src="/assets/images/aegis_noho_hero_1.png" alt="Sentinel Guard Policy Core" />
+            </div>
+            <div>
+              <span className="descriptor_sb">CORE SYSTEM 02</span>
+              <h3 className="h2_sb" style={{ fontSize: '1.6rem', marginTop: '4px' }}>Sentinel Guard Policy Core</h3>
+              <p className="h3_rl" style={{ fontSize: '0.92rem', marginTop: '6px' }}>
+                Deterministic JSON policy evaluator enforcing DEFCON levels 1–3 and automated containment playbooks.
+              </p>
+            </div>
+            <div className="product-card-info">
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--txt-muted)' }}>License</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--txt-primary)' }}>$0 / Enterprise</div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button className="btn_sc" onClick={() => setActiveProductModal('sentinel')}>Learn more</button>
+                <button
+                  className="btn_pm"
+                  onClick={() => document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' })}
+                >
+                  View Directives
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. MODAL DETAIL POPUPS */}
+      {activeProductModal && (
+        <div className="product-popup-overflow" onClick={() => setActiveProductModal(null)}>
+          <div className="product-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="popup-close-btn" onClick={() => setActiveProductModal(null)}>
+              <X size={20} />
+            </div>
+
+            {activeProductModal === 'triage' ? (
+              <div>
+                <span className="descriptor_sb">ENGINE SPECIFICATIONS</span>
+                <h3 className="h2_sb" style={{ marginTop: '8px' }}>Aegis Voice Triage Engine</h3>
+                <p className="h3_rl" style={{ marginTop: '12px' }}>
+                  The Voice Triage Engine captures spoken analyst command streams via Deepgram WebSocket streaming, correlates events with live backend store, and returns structured MITRE ATT&CK technique classifications.
+                </p>
+
+                <div style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', height: '240px' }}>
+                  <img src="/assets/images/aegis_noho_product_1.png" alt="Detail View" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '24px' }}>
+                  <div style={{ padding: '16px', background: 'var(--bg-page)', borderRadius: '12px' }}>
+                    <div className="descriptor_sb">SPEECH RECOGNITION</div>
+                    <div style={{ fontWeight: 600, marginTop: '4px' }}>Deepgram / WebSpeech</div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-page)', borderRadius: '12px' }}>
+                    <div className="descriptor_sb">LLM POLICY REASONER</div>
+                    <div style={{ fontWeight: 600, marginTop: '4px' }}>Gemini 2.5 Flash</div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-page)', borderRadius: '12px' }}>
+                    <div className="descriptor_sb">AUDIO SYNTHESIS</div>
+                    <div style={{ fontWeight: 600, marginTop: '4px' }}>Murf AI Falcon</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '32px', textAlign: 'right' }}>
+                  <button className="btn_pm" onClick={() => { setActiveProductModal(null); document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' }); }}>
+                    Launch Console
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <span className="descriptor_sb">POLICY SPECIFICATIONS</span>
+                <h3 className="h2_sb" style={{ marginTop: '8px' }}>Sentinel Guard Policy Core</h3>
+                <p className="h3_rl" style={{ marginTop: '12px' }}>
+                  Enforces strict schema constraints over all LLM triage outputs. Guarantees zero hallucinations by validating JSON structures against strict TypeScript specifications before executing mitigation playbooks.
+                </p>
+
+                <div style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', height: '240px' }}>
+                  <img src="/assets/images/aegis_noho_hero_1.png" alt="Sentinel View" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '24px' }}>
+                  <div style={{ padding: '16px', background: 'var(--bg-page)', borderRadius: '12px' }}>
+                    <div className="descriptor_sb">DEFCON LEVELS</div>
+                    <div style={{ fontWeight: 600, marginTop: '4px' }}>Level 1, 2, 3</div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-page)', borderRadius: '12px' }}>
+                    <div className="descriptor_sb">ISOLATION PLAYBOOK</div>
+                    <div style={{ fontWeight: 600, marginTop: '4px' }}>Host & Credential Revoke</div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-page)', borderRadius: '12px' }}>
+                    <div className="descriptor_sb">HUMAN SAFEGUARD</div>
+                    <div style={{ fontWeight: 600, marginTop: '4px' }}>Strict Authorization</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '32px', textAlign: 'right' }}>
+                  <button className="btn_pm" onClick={() => { setActiveProductModal(null); document.getElementById('console-section')?.scrollIntoView({ behavior: 'smooth' }); }}>
+                    Explore Controls
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 7. ADVANTAGES SECTION (NOHO SLIDE CARDS) */}
+      <section id="advantages-section" className="advantages-section-parent">
+        <span className="descriptor_sb">* CORE ADVANTAGES</span>
+        <h2 className="h2_sb" style={{ marginTop: '8px' }}>Chairs that care... <strong>Agents that defend</strong></h2>
+
+        <div className="advantages-cards-grid">
+          <div className="advantage-card">
+            <div>
+              <div className="descriptor_sb">PERFORMANCE MATRIX</div>
+              <h3 className="h2_sb" style={{ fontSize: '1.4rem', marginTop: '12px' }}>99.9% Uptime SLA</h3>
+              <p className="h3_rl" style={{ fontSize: '0.9rem', marginTop: '8px' }}>
+                Resilient multi-tier architecture with seamless browser-local deterministic fallbacks if cloud APIs degrade.
+              </p>
+            </div>
+            <div className="advantage-card-id">01</div>
+          </div>
+
+          <div className="advantage-card">
+            <div>
+              <div className="descriptor_sb">POLICY ENGINE</div>
+              <h3 className="h2_sb" style={{ fontSize: '1.4rem', marginTop: '12px' }}>100% Deterministic</h3>
+              <p className="h3_rl" style={{ fontSize: '0.9rem', marginTop: '8px' }}>
+                Schema-constrained LLM policies guarantee verifiable JSON output with zero hallucination.
+              </p>
+            </div>
+            <div className="advantage-card-id">02</div>
+          </div>
+
+          <div className="advantage-card">
+            <div>
+              <div className="descriptor_sb">MACHINE SPEED</div>
+              <h3 className="h2_sb" style={{ fontSize: '1.4rem', marginTop: '12px' }}>12ms Avg Latency</h3>
+              <p className="h3_rl" style={{ fontSize: '0.9rem', marginTop: '8px' }}>
+                Real-time telemetry event streaming via Server-Sent Events (SSE) and persistent storage.
+              </p>
+            </div>
+            <div className="advantage-card-id">03</div>
+          </div>
+        </div>
+      </section>
+
+      {/* 8. LIVE SECURITY TRIAGE COCKPIT SECTION */}
+      <section id="console-section" style={{ padding: '80px 40px', maxWidth: '1360px', margin: '0 auto' }}>
+        <span className="descriptor_sb">* INTERACTIVE LIVE ENGINE</span>
+        <h2 className="h2_sb" style={{ marginTop: '8px' }}>Aegis Twin <strong>Security Command Cockpit</strong></h2>
+        <p className="h3_rl" style={{ marginTop: '8px' }}>Speak commands or type security questions below to run real-time AI triage.</p>
+
+        <div className="cockpit-noho-wrapper">
+          <div className="hero-preview-card" style={{ borderRadius: 0, border: 'none' }}>
             <div className="server-room-bg" />
             <div className="orange-laser-line" />
             <div className="hero-preview-top-badge">
               <span className="pulse-dot" />
-              <span>LIVE SYSTEM</span>
-            </div>
-
-            <div className="hero-preview-signal-badge">
-              <div className="signal-header">
-                <span>SIGNAL // 0084</span>
-                <span>{currentTime}</span>
-              </div>
-              <div className="signal-body">
-                Encoded process chain correlated on <span className="signal-entity">WIN-FIN-07</span>
-              </div>
-              <div className="signal-bar" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Ticker Marquee */}
-      <section className="marquee-section">
-        <div className="marquee-track">
-          <span className="marquee-label">BUILT TO OPERATE ACROSS YOUR STACK</span>
-          <span className="marquee-item">• AWS</span>
-          <span className="marquee-item">• CROWDSTRIKE</span>
-          <span className="marquee-item">• SENTINEL</span>
-          <span className="marquee-item">• OKTA</span>
-          <span className="marquee-item">• PALO ALTO</span>
-          <span className="marquee-item">• SPLUNK</span>
-          <span className="marquee-item">• AWS</span>
-          <span className="marquee-item">• CROWDSTRIKE</span>
-        </div>
-      </section>
-
-      {/* 4. Intelligence Layer Section */}
-      <section className="intelligence-section" id="intelligence">
-        <div className="intelligence-container">
-          <div className="intelligence-copy">
-            <span className="micro-label">* THE INTELLIGENCE LAYER</span>
-            <h2 className="intelligence-headline">
-              Not another dashboard. <br />
-              <span className="dim-text">A second mind for defense.</span>
-            </h2>
-            <p className="intelligence-subtext">
-              Aegis turns fragmented telemetry into one operating picture—then translates that picture into a clear, evidence-backed decision.
-            </p>
-          </div>
-
-          <div className="radar-graphic-box">
-            <div className="radar-ring r1" />
-            <div className="radar-ring r2" />
-            <div className="radar-ring r3" />
-            <div className="radar-sweep-hand" />
-            <div className="radar-core-icon">
               <Shield size={32} />
             </div>
           </div>

@@ -1,6 +1,58 @@
 {
-  "seq": 24,
-  "incidents": [],
+  "seq": 228,
+  "incidents": [
+    [
+      "INC-4282",
+      {
+        "id": "INC-4282",
+        "title": "Suspicious PowerShell execution on WIN-FIN-07",
+        "severity": "Critical",
+        "status": "Contained",
+        "source": "EDR",
+        "entity": "WIN-FIN-07",
+        "detectedAt": "2026-08-19T05:10:14.835Z",
+        "ago": "Just now",
+        "assignee": "Aegis Twin",
+        "score": 91,
+        "origin": "telemetry",
+        "evidenceCount": 2
+      }
+    ],
+    [
+      "INC-4283",
+      {
+        "id": "INC-4283",
+        "title": "Password spray detected against account",
+        "severity": "High",
+        "status": "Investigating",
+        "source": "Identity",
+        "entity": "target.user@northstar.io",
+        "detectedAt": "2026-08-19T05:18:16.667Z",
+        "ago": "Just now",
+        "assignee": "Aegis Twin",
+        "score": 76,
+        "origin": "telemetry",
+        "evidenceCount": 2
+      }
+    ],
+    [
+      "INC-4284",
+      {
+        "id": "INC-4284",
+        "title": "Suspicious PowerShell execution on WIN-FIN-07",
+        "severity": "Critical",
+        "status": "Investigating",
+        "source": "EDR",
+        "entity": "WIN-FIN-07",
+        "detectedAt": "2026-08-19T05:18:16.672Z",
+        "ago": "Just now",
+        "assignee": "Aegis Twin",
+        "score": 91,
+        "origin": "telemetry",
+        "evidenceCount": 2
+      }
+    ]
+  ],
   "assets": [
     [
       "AST-1042",
@@ -12,18 +64,888 @@
         "owner": "Finance Operations",
         "criticality": "Critical",
         "status": "online",
-        "lastSeen": "2026-08-17T08:20:28.826Z",
+        "lastSeen": "2026-08-19T05:18:14.022Z",
         "riskScore": 96,
         "discovered": false
+      }
+    ],
+    [
+      "AST-8271",
+      {
+        "id": "AST-8271",
+        "name": "SMOKE-HOST-01",
+        "type": "Workload",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "isolated",
+        "lastSeen": "2026-08-17T08:25:23.327Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-4846",
+      {
+        "id": "AST-4846",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.662Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-3756",
+      {
+        "id": "AST-3756",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.666Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2658",
+      {
+        "id": "AST-2658",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.668Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-1662",
+      {
+        "id": "AST-1662",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.669Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-1142",
+      {
+        "id": "AST-1142",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.670Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6446",
+      {
+        "id": "AST-6446",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.672Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7807",
+      {
+        "id": "AST-7807",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.673Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-8703",
+      {
+        "id": "AST-8703",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.674Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6394",
+      {
+        "id": "AST-6394",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.675Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-3288",
+      {
+        "id": "AST-3288",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.676Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-9525",
+      {
+        "id": "AST-9525",
+        "name": "WIN-FIN-07",
+        "type": "Endpoint",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:30.682Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-4767",
+      {
+        "id": "AST-4767",
+        "name": "SMOKE-HOST-01",
+        "type": "Workload",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:27:34.455Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6749",
+      {
+        "id": "AST-6749",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.191Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-5661",
+      {
+        "id": "AST-5661",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.195Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7657",
+      {
+        "id": "AST-7657",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.196Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-1052",
+      {
+        "id": "AST-1052",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.197Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2081",
+      {
+        "id": "AST-2081",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.198Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7800",
+      {
+        "id": "AST-7800",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.199Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-4199",
+      {
+        "id": "AST-4199",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.200Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2661",
+      {
+        "id": "AST-2661",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.201Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6930",
+      {
+        "id": "AST-6930",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.202Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-8536",
+      {
+        "id": "AST-8536",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.203Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-9698",
+      {
+        "id": "AST-9698",
+        "name": "WIN-FIN-07",
+        "type": "Endpoint",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:33:53.208Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-1742",
+      {
+        "id": "AST-1742",
+        "name": "TEST-HOST-01",
+        "type": "Workload",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:46:11.826Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6518",
+      {
+        "id": "AST-6518",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.448Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-3540",
+      {
+        "id": "AST-3540",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.452Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6621",
+      {
+        "id": "AST-6621",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.453Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6561",
+      {
+        "id": "AST-6561",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.454Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-1530",
+      {
+        "id": "AST-1530",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.455Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2885",
+      {
+        "id": "AST-2885",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.456Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-4675",
+      {
+        "id": "AST-4675",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.457Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-9289",
+      {
+        "id": "AST-9289",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.458Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7287",
+      {
+        "id": "AST-7287",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.459Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2181",
+      {
+        "id": "AST-2181",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.461Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-8303",
+      {
+        "id": "AST-8303",
+        "name": "WIN-FIN-07",
+        "type": "Endpoint",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "offline",
+        "lastSeen": "2026-08-17T08:47:42.467Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2386",
+      {
+        "id": "AST-2386",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.813Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2863",
+      {
+        "id": "AST-2863",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.817Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-9602",
+      {
+        "id": "AST-9602",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.819Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-5780",
+      {
+        "id": "AST-5780",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.820Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-9219",
+      {
+        "id": "AST-9219",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.820Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-5268",
+      {
+        "id": "AST-5268",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.821Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-4712",
+      {
+        "id": "AST-4712",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.823Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-3036",
+      {
+        "id": "AST-3036",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.824Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7087",
+      {
+        "id": "AST-7087",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.825Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6645",
+      {
+        "id": "AST-6645",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.827Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-4985",
+      {
+        "id": "AST-4985",
+        "name": "WIN-FIN-07",
+        "type": "Endpoint",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:10:14.833Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7653",
+      {
+        "id": "AST-7653",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.652Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2875",
+      {
+        "id": "AST-2875",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.656Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7423",
+      {
+        "id": "AST-7423",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.658Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-2832",
+      {
+        "id": "AST-2832",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.658Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-5611",
+      {
+        "id": "AST-5611",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.659Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-1014",
+      {
+        "id": "AST-1014",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.661Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7889",
+      {
+        "id": "AST-7889",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.661Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-7667",
+      {
+        "id": "AST-7667",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.662Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-1539",
+      {
+        "id": "AST-1539",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.663Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-6613",
+      {
+        "id": "AST-6613",
+        "name": "target.user@northstar.io",
+        "type": "Identity",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.664Z",
+        "riskScore": 20,
+        "discovered": true
+      }
+    ],
+    [
+      "AST-8042",
+      {
+        "id": "AST-8042",
+        "name": "WIN-FIN-07",
+        "type": "Endpoint",
+        "platform": "Discovered",
+        "owner": "Unassigned",
+        "criticality": "Medium",
+        "status": "online",
+        "lastSeen": "2026-08-19T05:18:16.670Z",
+        "riskScore": 20,
+        "discovered": true
       }
     ]
   ],
   "cases": [],
   "blockedIndicators": [],
   "counters": {
-    "incidentSeq": 4281,
+    "incidentSeq": 4284,
     "caseSeq": 100,
-    "telemetry24hCount": 0
+    "telemetry24hCount": 83
   },
-  "savedAt": "2026-08-17T10:45:10.456Z"
+  "savedAt": "2026-08-19T05:18:18.273Z"
 }

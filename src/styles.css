@@ -2130,3 +2130,90 @@ input, textarea, select {
   .nav-overlay-right-top { padding: 24px; }
   .nav-overlay-links-grid { grid-template-columns: 1fr; gap: 24px; }
 }
+
+/* ================================================================
+   LUMINARY DESIGN SYSTEM & DESIGN ENGINE INTEGRATION
+   ================================================================ */
+
+:root {
+  --base-deep: #0F1115;
+  --base-mid: #161A20;
+  --base-soft: #1C2128;
+  --slate-warm: #6B7280;
+  --slate-light: #9CA3AF;
+  --graphite: #2A2E35;
+  --graphite-soft: #3D424A;
+  --ivory: #E5E7EB;
+  --ivory-muted: #C9CDD4;
+  --silver: #B0B8C4;
+  --panel-bg: rgba(22, 26, 32, 0.55);
+  --panel-border: rgba(156, 163, 175, 0.08);
+  --silk-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Grain & Atmosphere ── */
+.grain {
+  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  opacity: 0.028; mix-blend-mode: overlay;
+}
+
+.atmosphere {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(180deg, #0F1115 0%, #161A20 35%, #1C2128 70%, #0D0F13 100%);
+}
+
+/* ── Luminary Side Panels ── */
+.side-panel {
+  position: fixed; top: 50%; transform: translateY(-50%);
+  width: 56px; z-index: 100;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; padding: 24px 0;
+  pointer-events: none;
+}
+.side-panel.left { left: 16px; }
+.side-panel.right { right: 16px; }
+.side-label {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  font-size: 9px; font-weight: 500; letter-spacing: 0.25em; text-transform: uppercase;
+  color: var(--slate-warm); opacity: 0.5;
+}
+.side-track {
+  width: 1px; height: 140px;
+  background: rgba(156,163,175,0.06); position: relative; border-radius: 1px;
+}
+.side-track-fill {
+  position: absolute; top: 0; left: 0; width: 100%; height: 60%;
+  background: linear-gradient(to bottom, var(--silver), rgba(176,184,196,0.15));
+  border-radius: 1px; transition: height 1.2s var(--silk-ease);
+}
+.side-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--slate-warm); opacity: 0.15;
+  transition: opacity 0.8s var(--silk-ease), transform 0.8s var(--silk-ease), box-shadow 0.8s var(--silk-ease);
+}
+.side-dot.active {
+  opacity: 0.8; background: var(--silver);
+  box-shadow: 0 0 12px rgba(176,184,196,0.3); transform: scale(1.3);
+}
+.side-readout {
+  font-size: 9px; font-weight: 400; letter-spacing: 0.1em;
+  color: var(--slate-warm); opacity: 0.35;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Hero Luminary Badge ── */
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 6px 16px; border-radius: 100px;
+  background: rgba(42, 46, 53, 0.4); border: 1px solid rgba(156, 163, 175, 0.12);
+  margin-bottom: 24px; backdrop-filter: blur(12px);
+}
+.hero-badge-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #41d8a0;
+  box-shadow: 0 0 8px #41d8a0; animation: pulseGlow 2s infinite ease-in-out;
+}
+.hero-badge span {
+  font-family: 'Montserrat', sans-serif; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.15em; text-transform: uppercase; color: var(--silver);
+}
+

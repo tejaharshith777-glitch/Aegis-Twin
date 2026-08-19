@@ -766,6 +766,31 @@ export default function App() {
 
   return (
     <div className="site-layout">
+      {/* Luminary Design System Overlay & Atmosphere */}
+      <svg className="grain" width="100%" height="100%">
+        <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="5" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+        <rect width="100%" height="100%" filter="url(#n)"/>
+      </svg>
+      <div className="atmosphere" />
+
+      {/* Luminary Interactive Side Panels */}
+      <nav className="side-panel left" aria-label="Scroll indicators">
+        <span className="side-label">Scroll</span>
+        <div className="side-track"><div className="side-track-fill" /></div>
+        <div className="side-dot active" />
+        <div className="side-dot" />
+        <div className="side-dot" />
+        <div className="side-readout">01</div>
+      </nav>
+
+      <nav className="side-panel right" aria-label="Status indicators">
+        <span className="side-label">Status</span>
+        <div className="side-track"><div className="side-track-fill" style={{ height: '85%' }} /></div>
+        <div className="side-dot active" />
+        <div className="side-dot active" />
+        <div className="side-readout">LMN</div>
+      </nav>
+
       {/* 1. Header Bar */}
       <div className="site-top-banner">
         <span>Aegis Autonomous Defense / Production Node</span>
@@ -792,6 +817,7 @@ export default function App() {
           <li><a href="#protocol" className="header-nav-link">Protocol</a></li>
           <li><a href="#intelligence" className="header-nav-link">Intelligence</a></li>
           <li><a href="#faq" className="header-nav-link">FAQ</a></li>
+          <li><a href="/templatemo_621_luminary/index.html" target="_blank" rel="noopener noreferrer" className="header-nav-link">Luminary Template</a></li>
         </ul>
 
         <div className="header-actions">
@@ -818,6 +844,11 @@ export default function App() {
       <section className="hero-landing-section">
         <div className="hero-landing-container">
           <div className="hero-left-copy">
+            <div className="hero-badge">
+              <div className="hero-badge-dot" />
+              <span>Luminary AI Workflows Engine</span>
+            </div>
+            <br />
             <span className="micro-label">* AUTONOMOUS SECURITY OPERATIONS</span>
             <h1 className="hero-headline">
               Security that <br />

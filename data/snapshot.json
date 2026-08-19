@@ -1,7 +1,23 @@
 {
-  "seq": 6,
+  "seq": 24,
   "incidents": [],
-  "assets": [],
+  "assets": [
+    [
+      "AST-1042",
+      {
+        "id": "AST-1042",
+        "name": "WIN-FIN-07",
+        "type": "Endpoint",
+        "platform": "Windows 11",
+        "owner": "Finance Operations",
+        "criticality": "Critical",
+        "status": "online",
+        "lastSeen": "2026-08-17T08:20:28.826Z",
+        "riskScore": 96,
+        "discovered": false
+      }
+    ]
+  ],
   "cases": [],
   "blockedIndicators": [],
   "counters": {
@@ -9,5 +25,5 @@
     "caseSeq": 100,
     "telemetry24hCount": 0
   },
-  "savedAt": "2026-08-17T09:13:59.830Z"
+  "savedAt": "2026-08-17T10:45:10.456Z"
 }
